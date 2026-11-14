@@ -2,13 +2,18 @@ name: Commitlint
 
 on:
   workflow_call:
+    inputs:
+      check-pr-title:
+        description: Also lint the pull request title
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   commitlint:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,13 +29,36 @@ jobs:
         with:
           node-version: '26.13.1'
           cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@budget-buddy-org'
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Lint pull request title
+        if: inputs.check-pr-title && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint --verbose
+
       - name: Lint commit messages
-        if: github.actor != 'dependabot[bot]'
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: pnpm exec commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+
+      - name: Lint push commits
+        if: github.event_name == 'push' && github.actor != 'dependabot[bot]'
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.after }}
+        run: |
+          # A newly created branch has no previous commit to use as the range base.
+          if [[ "$BASE_SHA" == '0000000000000000000000000000000000000000' ]]; then
+            pnpm exec commitlint --to "$HEAD_SHA" --verbose
+          else
+            pnpm exec commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+          fi

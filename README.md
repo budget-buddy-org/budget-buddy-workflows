@@ -7,8 +7,8 @@ event triggers, build commands, lint configuration, and dependency lockfiles.
 
 `.github/workflows/commitlint.yml` checks pull request commits using the caller's
 installed `@commitlint/cli` and configuration. Dependabot commits are exempt,
-matching the existing API and contracts workflows. No additional secrets are needed;
-the job only requests `contents: read`.
+matching the existing workflows. No additional secrets are needed; the job requests
+`contents: read` and `packages: read` so callers can install contracts from GitHub Packages.
 
 Example caller (replace `COMMIT_SHA` with a published full commit SHA):
 
@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   commitlint:
@@ -32,8 +33,15 @@ Installation uses `--frozen-lockfile --ignore-scripts`; lifecycle scripts such a
 Husky setup are unnecessary for checking commit messages.
 
 The caller must supply a pnpm lockfile, commitlint dependency, and commitlint config.
-Only `pull_request` events are supported. PR-title and push checks can be added
-when their policy is agreed across apps.
+The workflow checks commit ranges on `pull_request` and `push` events. For a new
+branch push (an all-zero `before` SHA), it checks history up to the pushed head.
+On `workflow_dispatch` it verifies setup and installation without linting a commit range,
+allowing downstream jobs to run as before.
+
+Set `with: { check-pr-title: true }` to also check PR titles, as the web app does.
+Include `edited` in the caller's `pull_request.types` to recheck changed titles.
+Titles and commit references are passed through environment variables to avoid
+embedding event text in shell source. Dependabot skips all lint checks.
 
 ## Updating and rolling out shared jobs
 
