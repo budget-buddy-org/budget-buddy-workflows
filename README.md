@@ -17,6 +17,7 @@ name: Commitlint
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
