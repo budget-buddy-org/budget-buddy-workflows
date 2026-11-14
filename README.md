@@ -38,7 +38,7 @@ branch push (an all-zero `before` SHA), it checks history up to the pushed head.
 On `workflow_dispatch` it verifies setup and installation without linting a commit range,
 allowing downstream jobs to run as before.
 
-Set `with: { check-pr-title: true }` to also check PR titles, as the web app does.
+All callers check PR titles as well as commits; there are no per-repository options.
 Include `edited` in the caller's `pull_request.types` to recheck changed titles.
 Titles and commit references are passed through environment variables to avoid
 embedding event text in shell source. Dependabot skips all lint checks.
