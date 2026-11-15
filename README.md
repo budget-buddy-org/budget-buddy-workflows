@@ -16,7 +16,7 @@ Caller repositories own their triggers, application commands, contracts, and rel
 | `gradle-dependency-submission.yml` | API | Dependency graph submission with package-read access |
 | Container actions and `publish-image.yml` | API, web | Source-bound digest handoff, scans, signed manifest, tag promotion |
 
-Reusable workflows are called as jobs with a full commit SHA. Composite actions are used where a repository keeps its own steps, such as contracts publishing. Internally, `$/` resolves actions from this library at the running workflow's commit, independent of the caller checkout. This requires GitHub.com support for [same-repository action references](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax).
+All consumers use the same full library commit SHA for shared workflows and actions. Reusable workflows are called as jobs. Composite actions are used where a repository keeps its own steps, such as contracts publishing. Internally, `$/` resolves actions from this library at the running workflow's commit, independent of the caller checkout. This requires GitHub.com support for [same-repository action references](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax).
 
 ## Runtime policy
 
