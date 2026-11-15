@@ -1,0 +1,39 @@
+name: Validate image metadata
+description: Resolve an immutable build commit and validate release/version consistency
+inputs:
+  version-file:
+    description: package.json or gradle.properties
+    required: true
+  ref:
+    description: Requested source tag or ref
+    required: true
+  publish:
+    description: Whether this is production publication
+    default: 'false'
+outputs:
+  image:
+    description: Caller GHCR image
+    value: ${{ steps.metadata.outputs.image }}
+  version:
+    description: Validated version
+    value: ${{ steps.metadata.outputs.version }}
+  source-sha:
+    description: Immutable source commit
+    value: ${{ steps.metadata.outputs.source-sha }}
+  node-version:
+    description: Shared Node version for Docker builds
+    value: ${{ steps.metadata.outputs.node-version }}
+  pnpm-version:
+    description: Shared pnpm version for Docker builds
+    value: ${{ steps.metadata.outputs.pnpm-version }}
+runs:
+  using: composite
+  steps:
+    - id: metadata
+      shell: bash
+      env:
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
+        VERSION_FILE: ${{ inputs.version-file }}
+        SOURCE_REF: ${{ inputs.ref }}
+        PUBLISH_IMAGES: ${{ inputs.publish }}
+      run: node "$IMAGE_HELPER" metadata

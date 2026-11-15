@@ -1,0 +1,40 @@
+name: Verify platform records
+description: Reject mixed-source, mixed-version, or missing platform digest artifacts
+inputs:
+  directory:
+    description: Downloaded record directory
+    required: true
+  version:
+    description: Expected version
+    required: true
+  source-sha:
+    description: Expected source SHA
+    required: true
+  platform:
+    description: Validate one platform, or both when empty
+    default: ''
+outputs:
+  image:
+    description: Validated GHCR image
+    value: ${{ steps.records.outputs.image }}
+  digest:
+    description: Digest for single-platform validation
+    value: ${{ steps.records.outputs.digest }}
+  digest-amd64:
+    description: amd64 digest
+    value: ${{ steps.records.outputs.digest-amd64 }}
+  digest-arm64:
+    description: arm64 digest
+    value: ${{ steps.records.outputs.digest-arm64 }}
+runs:
+  using: composite
+  steps:
+    - id: records
+      shell: bash
+      env:
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
+        RECORDS_DIR: ${{ inputs.directory }}
+        IMAGE_VERSION: ${{ inputs.version }}
+        SOURCE_SHA: ${{ inputs.source-sha }}
+        IMAGE_PLATFORM: ${{ inputs.platform }}
+      run: node "$IMAGE_HELPER" records

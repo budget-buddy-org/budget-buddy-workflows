@@ -64,3 +64,32 @@ test('all third-party action dependencies are immutable commits', () => {
   inspect('.github/workflows');
   inspect('.github/actions');
 });
+
+test('container signing and publication are unavailable to PR or push events', () => {
+  const publish = workflow('publish-image');
+  for (const job of Object.values(publish.jobs)) {
+    const allowed = new Function('github', `return (${job.if});`);
+    for (const event of ['pull_request', 'pull_request_target', 'push', 'issue_comment']) {
+      assert.equal(allowed({ event_name: event, ref: 'refs/heads/main', event: { action: 'published' } }), false);
+    }
+    assert.equal(allowed({ event_name: 'release', event: { action: 'published' } }), true);
+    assert.equal(allowed({ event_name: 'release', event: { action: 'created' } }), false);
+    assert.equal(allowed({ event_name: 'workflow_dispatch' }), true);
+  }
+  assert.deepEqual(publish.jobs.publish.permissions, { contents: 'read', packages: 'write', 'id-token': 'write' });
+  const action = load(readFileSync('.github/actions/publish-image/action.yml', 'utf8'));
+  const steps = action.runs.steps;
+  const sign = steps.findIndex(step => step.uses === '$/.github/actions/sign-image');
+  const promote = steps.findIndex(step => step.name?.startsWith('Promote production'));
+  assert.ok(sign >= 0 && sign < promote, 'promotion must follow successful signature verification');
+  assert.equal(steps[promote].if, "inputs.publish == 'true'");
+  assert.deepEqual(Object.keys(workflow('container-smoke').on).sort(), ['workflow_call', 'workflow_dispatch']);
+  for (const job of Object.values(workflow('container-smoke').jobs)) {
+    assert.equal(job.if, "github.event_name == 'workflow_dispatch'");
+  }
+  const trigger = workflow('validate').jobs.containers.if;
+  const enabled = new Function('github', 'inputs', `return (${trigger});`);
+  assert.equal(enabled({ event_name: 'pull_request' }, { containers: true }), false);
+  assert.equal(enabled({ event_name: 'workflow_dispatch' }, { containers: true }), true);
+  assert.equal(enabled({ event_name: 'workflow_dispatch' }, { containers: false }), false);
+});

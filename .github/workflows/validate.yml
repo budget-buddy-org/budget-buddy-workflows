@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      containers:
+        description: Run the signed multi-platform fixture and deliberate vulnerability rejection test
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,3 +47,12 @@ jobs:
           ignore-scripts: 'true'
       - name: Exercise real commitlint with consumer event fixtures
         run: node --test tests/*.test.mjs
+  containers:
+    needs: [lint, regression]
+    if: github.event_name == 'workflow_dispatch' && inputs.containers
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+    uses: ./.github/workflows/container-smoke.yml
