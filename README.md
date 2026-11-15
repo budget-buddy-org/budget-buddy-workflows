@@ -49,7 +49,7 @@ Release callers pass the two App secrets explicitly and depend on successful val
 
 ## Image publication
 
-Both builders resolve the requested ref to one immutable commit before building native amd64 and arm64 images. API uses buildpacks; web uses its Dockerfile and receives Node/pnpm build arguments from the shared policy. Web retains SBOM, provenance, BuildKit secrets, and separate platform caches.
+Both builders resolve the requested ref to one immutable commit before building native amd64 and arm64 images. API uses buildpacks followed by a Buildx OCI export (Docker manifest lists cannot retain index annotations); web uses its Dockerfile and receives Node/pnpm build arguments from the shared policy. Web retains SBOM, provenance, BuildKit secrets, and separate platform caches.
 
 ```mermaid
 flowchart LR
