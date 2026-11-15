@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRecords, blockingFindings, validateIndex, versionFrom, immutableImage } from '../scripts/images.mjs';
+import { validateRecords, blockingFindings, validateIndex, versionFrom, immutableImage, promotionTags } from '../scripts/images.mjs';
 import { signingIdentity } from '../scripts/signing-identity.mjs';
 
 const repo = 'budget-buddy-org/budget-buddy-web-app';
@@ -43,4 +43,10 @@ test('signature verification binds the reusable signer identity and the caller r
   assert.throws(() => signingIdentity(claims, 'other/repository'));
   assert.throws(() => signingIdentity({ ...claims, job_workflow_ref: 'other/repo/.github/workflows/publish-image.yml@main' }, repo));
   assert.throws(() => signingIdentity({ ...claims, iss: 'https://untrusted.example' }, repo));
+});
+test('promotion is immutable, retries are idempotent, and old releases cannot roll aliases back', () => {
+  assert.deepEqual(promotionTags(repo, '1.2.3', 'v1.2.3', '', digest), ['ghcr.io/' + repo + ':1.2.3', 'ghcr.io/' + repo + ':1.2', 'ghcr.io/' + repo + ':latest']);
+  assert.equal(promotionTags(repo, '1.2.3', 'v1.2.3', digest, digest).length, 3);
+  assert.deepEqual(promotionTags(repo, '1.2.3', 'v1.3.0', digest, digest), ['ghcr.io/' + repo + ':1.2.3']);
+  assert.throws(() => promotionTags(repo, '1.2.3', 'v1.2.3', 'sha256:' + 'c'.repeat(64), digest));
 });

@@ -52,6 +52,17 @@ runs:
     - uses: $/.github/actions/sign-image
       with:
         image-ref: ${{ steps.records.outputs.image }}@${{ steps.merge.outputs.digest }}
+    - name: Verify candidate tag promotion preserves the signed digest
+      if: inputs.publish != 'true'
+      shell: bash
+      env:
+        IMAGE: ${{ steps.records.outputs.image }}
+        DIGEST: ${{ steps.merge.outputs.digest }}
+      run: |
+        tag="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-verified"
+        docker buildx imagetools create --tag "$IMAGE:$tag" "$IMAGE@$DIGEST"
+        copied=$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{.Manifest.Digest}}')
+        [[ "$copied" == "$DIGEST" ]]
     - name: Promote production tags only after signature verification
       if: inputs.publish == 'true'
       shell: bash
@@ -62,7 +73,9 @@ runs:
         AMD64_DIGEST: ${{ steps.records.outputs.digest-amd64 }}
         ARM64_DIGEST: ${{ steps.records.outputs.digest-arm64 }}
         IMAGE_VERSION: ${{ inputs.version }}
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
       run: |
+        existing=''
         if existing=$(docker buildx imagetools inspect "$IMAGE:$IMAGE_VERSION" --format '{{.Manifest.Digest}}' 2> "$RUNNER_TEMP/tag-inspect.err"); then
           if [[ "$existing" != "$DIGEST" ]]; then
             echo 'Refusing to replace an existing version tag with different content. Retry failed publication jobs using their original digest artifacts.' >&2
@@ -72,11 +85,16 @@ runs:
           cat "$RUNNER_TEMP/tag-inspect.err" >&2
           exit 1
         fi
-        args=(--tag "$IMAGE:$IMAGE_VERSION")
-        latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-        if [[ "$latest" == "v$IMAGE_VERSION" || "$latest" == "$IMAGE_VERSION" ]]; then
-          args+=(--tag "$IMAGE:${IMAGE_VERSION%.*}" --tag "$IMAGE:latest")
-        fi
+        export EXISTING_DIGEST="$existing" SIGNED_DIGEST="$DIGEST"
+        export LATEST_RELEASE
+        LATEST_RELEASE=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+        export PROMOTION_TAGS_FILE="$RUNNER_TEMP/promotion-tags.txt"
+        node "$IMAGE_HELPER" promotion
+        mapfile -t tags < "$PROMOTION_TAGS_FILE"
+        args=()
+        for tag in "${tags[@]}"; do
+          args+=(--tag "$tag")
+        done
         docker buildx imagetools create "${args[@]}" "$IMAGE@$DIGEST"
         docker buildx imagetools create --prefer-index=false --tag "$IMAGE:$IMAGE_VERSION-amd64" "$IMAGE@$AMD64_DIGEST"
         docker buildx imagetools create --prefer-index=false --tag "$IMAGE:$IMAGE_VERSION-arm64" "$IMAGE@$ARM64_DIGEST"

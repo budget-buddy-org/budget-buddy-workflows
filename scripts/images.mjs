@@ -67,6 +67,14 @@ export function validateIndex(index, sha, releaseVersion) {
     throw new Error('Manifest source/version annotations do not match the build');
   }
 }
+export function promotionTags(repository, releaseVersion, latestRelease, existingDigest, signedDigest) {
+  const name = image(repository), v = version(releaseVersion);
+  digest(signedDigest);
+  if (existingDigest && digest(existingDigest) !== signedDigest) throw new Error('Refusing to replace immutable version content');
+  const tags = [`${name}:${v}`];
+  if (latestRelease === v || latestRelease === `v${v}`) tags.push(`${name}:${v.slice(0, v.lastIndexOf('.'))}`, `${name}:latest`);
+  return tags;
+}
 function emit(values) {
   for (const [name, value] of Object.entries(values)) {
     if (/[\r\n]/.test(String(value))) throw new Error('Invalid workflow output');
@@ -134,6 +142,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     case 'index':
       validateIndex(JSON.parse(readFileSync(process.argv[3], 'utf8')), sourceSha(env.SOURCE_SHA), version(env.IMAGE_VERSION));
       break;
+    case 'promotion': {
+      const tags = promotionTags(env.GITHUB_REPOSITORY, env.IMAGE_VERSION, env.LATEST_RELEASE, env.EXISTING_DIGEST, env.SIGNED_DIGEST);
+      writeFileSync(env.PROMOTION_TAGS_FILE, tags.join('\n') + '\n');
+      break;
+    }
     default: throw new Error('Unknown image helper operation');
   }
 }
