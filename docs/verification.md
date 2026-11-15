@@ -12,6 +12,7 @@ Verified on 2026-11-15.
 | Shared container library | [Full fixture](https://github.com/budget-buddy-org/ci-workflows/actions/runs/43741898007) passed native amd64/arm64 builds, digest validation, both pulls, SARIF, actual vulnerability rejection, Cosign verification, and signed-digest tag copy. |
 | API common-policy candidate | [Final run](https://github.com/budget-buddy-org/budget-buddy-api/actions/runs/43741927210) passed both native builds, the common CRITICAL gate on both platforms, both pulls, signer verification and signed-digest tag copy. |
 | Web common-policy candidate | [Final run](https://github.com/budget-buddy-org/budget-buddy-web-app/actions/runs/43741944622) passed both native builds, non-root startup/runtime-config/SPA routing checks, the common CRITICAL gate, both pulls, signer verification and signed-digest tag copy. |
+| Final app release previews | [API](https://github.com/budget-buddy-org/budget-buddy-api/actions/runs/43742451545) and [web](https://github.com/budget-buddy-org/budget-buddy-web-app/actions/runs/43742454899) passed using the final common library commit. |
 | Final common runtime reader | [Contracts PR #155](https://github.com/budget-buddy-org/budget-buddy-contracts/pull/155) and [release preview](https://github.com/budget-buddy-org/budget-buddy-contracts/actions/runs/43742014211) validated the same library commit used by both apps. |
 | Native audit cleanup | [iOS PR #114](https://github.com/budget-buddy-org/budget-buddy-ios-app/pull/114) merged after its iOS build and SonarCloud checks passed. |
 
