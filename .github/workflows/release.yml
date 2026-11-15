@@ -1,0 +1,56 @@
+name: Semantic release
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Preview the default branch without preparing or publishing a release
+        type: boolean
+        default: false
+    secrets:
+      RELEASE_BOT_ID:
+        required: true
+      RELEASE_BOT_PRIVATE_KEY:
+        required: true
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: release-${{ github.repository }}-${{ inputs.dry-run && 'preview' || 'publish' }}
+  cancel-in-progress: false
+jobs:
+  release:
+    # Credential-bearing jobs never run automatically on pull requests.
+    if: (inputs.dry-run && github.event_name == 'workflow_dispatch') || (!inputs.dry-run && github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.dry-run && github.event.repository.default_branch || github.sha }}
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: $/.github/actions/setup-java
+      - uses: $/.github/actions/setup-node
+      - name: Repository release checks
+        run: pnpm run --if-present release:verify
+      - name: Release or preview
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          args=()
+          if [[ "$DRY_RUN" == 'true' ]]; then
+            args+=(--dry-run)
+          fi
+          pnpm exec semantic-release "${args[@]}"

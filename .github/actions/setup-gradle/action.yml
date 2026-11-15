@@ -1,0 +1,9 @@
+name: Set up Budget Buddy Gradle
+description: Shared Java toolchain and Gradle cache policy
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/setup-java
+    - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      with:
+        cache-provider: basic
