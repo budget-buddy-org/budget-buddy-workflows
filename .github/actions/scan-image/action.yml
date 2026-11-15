@@ -50,7 +50,7 @@ runs:
         fi
     - name: Upload available SARIF, including when the scan fails
       if: always() && steps.convert.outputs.exists == 'true' && inputs.upload-sarif == 'true'
-      uses: github/codeql-action@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3/upload-sarif
+      uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
       with:
         sarif_file: ${{ steps.paths.outputs.sarif }}
         category: ${{ steps.paths.outputs.category }}

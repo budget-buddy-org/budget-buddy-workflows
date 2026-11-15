@@ -63,6 +63,9 @@ test('all third-party action dependencies are immutable commits', () => {
   }
   inspect('.github/workflows');
   inspect('.github/actions');
+  const scan = load(readFileSync('.github/actions/scan-image/action.yml', 'utf8'));
+  const upload = scan.runs.steps.find(step => step.uses?.startsWith('github/codeql-action'));
+  assert.match(upload.uses, /^github\/codeql-action\/upload-sarif@[a-f0-9]{40}$/);
 });
 
 test('container signing and publication are unavailable to PR or push events', () => {
