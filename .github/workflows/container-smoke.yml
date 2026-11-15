@@ -1,0 +1,108 @@
+name: Validate container library
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      source-sha: ${{ steps.metadata.outputs.source-sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cp tests/fixtures/node/package.json package.json
+      - uses: $/.github/actions/image-metadata
+        id: metadata
+        with:
+          version-file: package.json
+          ref: ${{ github.ref_name }}
+          publish: 'false'
+        # The fixture metadata is copied only into this job's workspace.
+  build:
+    if: github.event_name == 'workflow_dispatch'
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.source-sha }}
+      - uses: $/.github/actions/setup-container
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        id: build
+        with:
+          context: tests/fixtures/container
+          platforms: ${{ matrix.platform }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+          sbom: true
+          provenance: mode=max
+      - uses: $/.github/actions/image-record
+        with:
+          digest: ${{ steps.build.outputs.digest }}
+          platform: ${{ matrix.platform }}
+          version: ${{ needs.prepare.outputs.version }}
+          source-sha: ${{ needs.prepare.outputs.source-sha }}
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [prepare, build]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+      source-sha: ${{ needs.prepare.outputs.source-sha }}
+      publish: false
+  blocking-scan:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve an intentionally vulnerable fixture without running it
+        id: fixture
+        run: |
+          docker pull --platform linux/amd64 alpine:3.9.2
+          ref=$(docker image inspect alpine:3.9.2 --format '{{index .RepoDigests 0}}')
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - uses: $/.github/actions/scan-image
+        id: vulnerable
+        continue-on-error: true
+        with:
+          image-ref: ${{ steps.fixture.outputs.ref }}
+          platform: linux/amd64
+          upload-sarif: 'false'
+      - name: Assert the real scanner gate rejected actual vulnerability findings
+        if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.vulnerable.outcome }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { blockingFindings } from './scripts/images.mjs';
+          const report = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/image-scan-linux-amd64/trivy.json', 'utf8'));
+          assert.ok(blockingFindings(report, 'linux/amd64').length > 0);
+          assert.equal(process.env.SCAN_OUTCOME, 'failure');
+          JS

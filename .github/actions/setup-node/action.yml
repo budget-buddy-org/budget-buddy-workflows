@@ -17,12 +17,8 @@ outputs:
 runs:
   using: composite
   steps:
-    - id: versions
-      shell: bash
-      env:
-        VERSIONS_FILE: ${{ github.action_path }}/../../../runtime-versions.json
-      run: |
-        node --input-type=commonjs -e 'const fs = require("node:fs"); const v = JSON.parse(fs.readFileSync(process.env.VERSIONS_FILE)); for (const name of ["node", "pnpm"]) { if (!/^\d+\.\d+\.\d+$/.test(v[name])) throw new Error("Invalid " + name + " version"); fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${v[name]}\n`); }'
+    - uses: $/.github/actions/tool-versions
+      id: versions
     - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       with:
         version: ${{ steps.versions.outputs.pnpm }}

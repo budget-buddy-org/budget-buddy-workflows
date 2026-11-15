@@ -1,0 +1,64 @@
+name: Scan an immutable image
+description: Report fixed HIGH/CRITICAL findings and enforce the centrally reviewed repository policy
+inputs:
+  image-ref:
+    description: Immutable image reference
+    required: true
+  platform:
+    description: Target platform
+    required: true
+  upload-sarif:
+    description: Disable only for deliberately vulnerable regression fixtures
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/tool-versions
+      id: tools
+    - id: paths
+      shell: bash
+      env:
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
+        IMAGE_REF: ${{ inputs.image-ref }}
+        IMAGE_PLATFORM: ${{ inputs.platform }}
+      run: node "$IMAGE_HELPER" scan-paths
+    - name: Scan image
+      id: scan
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      env:
+        TRIVY_PLATFORM: ${{ inputs.platform }}
+      with:
+        version: v${{ steps.tools.outputs.trivy }}
+        image-ref: ${{ inputs.image-ref }}
+        format: json
+        output: ${{ steps.paths.outputs.json }}
+        exit-code: '0'
+        severity: CRITICAL,HIGH
+        scanners: vuln,secret
+        ignore-unfixed: true
+    - name: Convert available scan results to SARIF
+      id: convert
+      if: always() && steps.paths.outcome == 'success'
+      shell: bash
+      env:
+        SCAN_JSON: ${{ steps.paths.outputs.json }}
+        SCAN_SARIF: ${{ steps.paths.outputs.sarif }}
+      run: |
+        if [[ -f "$SCAN_JSON" ]]; then
+          trivy convert --format sarif --output "$SCAN_SARIF" "$SCAN_JSON"
+          echo 'exists=true' >> "$GITHUB_OUTPUT"
+        fi
+    - name: Upload available SARIF, including when the scan fails
+      if: always() && steps.convert.outputs.exists == 'true' && inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      with:
+        sarif_file: ${{ steps.paths.outputs.sarif }}
+        category: ${{ steps.paths.outputs.category }}
+    - name: Enforce vulnerability gate
+      if: always() && steps.scan.outcome == 'success'
+      shell: bash
+      env:
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
+        IMAGE_PLATFORM: ${{ inputs.platform }}
+        SCAN_JSON: ${{ steps.paths.outputs.json }}
+      run: node "$IMAGE_HELPER" gate "$SCAN_JSON"

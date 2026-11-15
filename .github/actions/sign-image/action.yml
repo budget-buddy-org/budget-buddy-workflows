@@ -1,0 +1,28 @@
+name: Sign and verify final manifest
+description: Keyless signing bound to the reusable publisher identity and caller repository
+inputs:
+  image-ref:
+    description: Validated immutable final index
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/tool-versions
+      id: tools
+    - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      with:
+        cosign-release: v${{ steps.tools.outputs.cosign }}
+    - name: Resolve the exact signer identity without logging the OIDC token
+      id: identity
+      shell: bash
+      env:
+        IDENTITY_SCRIPT: ${{ github.action_path }}/../../../scripts/signing-identity.mjs
+      run: node "$IDENTITY_SCRIPT"
+    - name: Sign and verify
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
+        SIGNER_IDENTITY: ${{ steps.identity.outputs.identity }}
+      run: |
+        cosign sign --yes "$IMAGE_REF"
+        cosign verify           --certificate-identity "$SIGNER_IDENTITY"           --certificate-oidc-issuer https://token.actions.githubusercontent.com           --certificate-github-workflow-repository "$GITHUB_REPOSITORY"           "$IMAGE_REF"

@@ -1,0 +1,109 @@
+name: Publish a verified multi-platform image
+description: Merge source-bound digests, sign and verify the index, then promote immutable release tags
+inputs:
+  directory:
+    description: Directory containing both platform records
+    required: true
+  version:
+    description: Release version
+    required: true
+  source-sha:
+    description: Immutable source commit
+    required: true
+  publish:
+    description: Promote production aliases after validation
+    default: 'false'
+outputs:
+  digest:
+    description: Signed and verified final index digest
+    value: ${{ steps.merge.outputs.digest }}
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/verify-image-records
+      id: records
+      with:
+        directory: ${{ inputs.directory }}
+        version: ${{ inputs.version }}
+        source-sha: ${{ inputs.source-sha }}
+    - name: Merge a candidate index and verify architecture coverage
+      id: merge
+      shell: bash
+      env:
+        IMAGE: ${{ steps.records.outputs.image }}
+        AMD64_DIGEST: ${{ steps.records.outputs.digest-amd64 }}
+        ARM64_DIGEST: ${{ steps.records.outputs.digest-arm64 }}
+        IMAGE_VERSION: ${{ inputs.version }}
+        SOURCE_SHA: ${{ inputs.source-sha }}
+        PUBLISH_IMAGES: ${{ inputs.publish }}
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
+      run: |
+        candidate="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        docker buildx imagetools create           --annotation "index:org.opencontainers.image.revision=$SOURCE_SHA"           --annotation "index:org.opencontainers.image.version=$IMAGE_VERSION"           --tag "$IMAGE:$candidate"           "$IMAGE@$AMD64_DIGEST" "$IMAGE@$ARM64_DIGEST"
+        digest=$(docker buildx imagetools inspect "$IMAGE:$candidate" --format '{{.Manifest.Digest}}')
+        [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+        docker buildx imagetools inspect "$IMAGE@$digest" --raw > "$RUNNER_TEMP/index.json"
+        node "$IMAGE_HELPER" index "$RUNNER_TEMP/index.json"
+        if [[ "$PUBLISH_IMAGES" != 'true' ]]; then
+          docker pull --platform linux/amd64 "$IMAGE@$digest"
+          docker pull --platform linux/arm64 "$IMAGE@$digest"
+        fi
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+    - uses: $/.github/actions/sign-image
+      with:
+        image-ref: ${{ steps.records.outputs.image }}@${{ steps.merge.outputs.digest }}
+    - name: Verify candidate tag promotion preserves the signed digest
+      if: inputs.publish != 'true'
+      shell: bash
+      env:
+        IMAGE: ${{ steps.records.outputs.image }}
+        DIGEST: ${{ steps.merge.outputs.digest }}
+      run: |
+        tag="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-verified"
+        docker buildx imagetools create --tag "$IMAGE:$tag" "$IMAGE@$DIGEST"
+        copied=$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{.Manifest.Digest}}')
+        [[ "$copied" == "$DIGEST" ]]
+    - name: Promote production tags only after signature verification
+      if: inputs.publish == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        IMAGE: ${{ steps.records.outputs.image }}
+        DIGEST: ${{ steps.merge.outputs.digest }}
+        AMD64_DIGEST: ${{ steps.records.outputs.digest-amd64 }}
+        ARM64_DIGEST: ${{ steps.records.outputs.digest-arm64 }}
+        IMAGE_VERSION: ${{ inputs.version }}
+        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
+      run: |
+        existing=''
+        if existing=$(docker buildx imagetools inspect "$IMAGE:$IMAGE_VERSION" --format '{{.Manifest.Digest}}' 2> "$RUNNER_TEMP/tag-inspect.err"); then
+          if [[ "$existing" != "$DIGEST" ]]; then
+            echo 'Refusing to replace an existing version tag with different content. Retry failed publication jobs using their original digest artifacts.' >&2
+            exit 1
+          fi
+        elif ! grep -Eiq 'not found|manifest unknown|MANIFEST_UNKNOWN' "$RUNNER_TEMP/tag-inspect.err"; then
+          cat "$RUNNER_TEMP/tag-inspect.err" >&2
+          exit 1
+        fi
+        export EXISTING_DIGEST="$existing" SIGNED_DIGEST="$DIGEST"
+        export LATEST_RELEASE
+        LATEST_RELEASE=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+        export PROMOTION_TAGS_FILE="$RUNNER_TEMP/promotion-tags.txt"
+        node "$IMAGE_HELPER" promotion
+        mapfile -t tags < "$PROMOTION_TAGS_FILE"
+        args=()
+        for tag in "${tags[@]}"; do
+          args+=(--tag "$tag")
+        done
+        docker buildx imagetools create "${args[@]}" "$IMAGE@$DIGEST"
+        docker buildx imagetools create --prefer-index=false --tag "$IMAGE:$IMAGE_VERSION-amd64" "$IMAGE@$AMD64_DIGEST"
+        docker buildx imagetools create --prefer-index=false --tag "$IMAGE:$IMAGE_VERSION-arm64" "$IMAGE@$ARM64_DIGEST"
+        published=$(docker buildx imagetools inspect "$IMAGE:$IMAGE_VERSION" --format '{{.Manifest.Digest}}')
+        [[ "$published" == "$DIGEST" ]]
+    - name: Record verified image
+      shell: bash
+      env:
+        IMAGE: ${{ steps.records.outputs.image }}
+        DIGEST: ${{ steps.merge.outputs.digest }}
+      run: |
+        printf '%s\n' "Verified image: $IMAGE@$DIGEST" >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,4 @@
-name: Propose runtime updates
+name: Propose tool updates
 
 on:
   schedule:
@@ -55,12 +55,12 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add runtime-versions.json
-          git commit -m 'ci: update shared Node and pnpm runtimes'
+          git commit -m 'ci: update shared tool versions'
           # Update only this automation-owned branch, with a lease on its remote head.
           previous=$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)
           git push "--force-with-lease=refs/heads/$branch:$previous" origin "$branch"
           if [[ -z "$(gh pr list --head "$branch" --json number --jq '.[].number')" ]]; then
-            printf '%s\n' 'Update the centrally maintained stable Node/pnpm releases. Shared CI regression tests and consumer rollout checks must pass before adoption.' > "$RUNNER_TEMP/runtime-pr.md"
-            gh pr create --head "$branch" --title 'ci: update shared Node and pnpm runtimes' --body-file "$RUNNER_TEMP/runtime-pr.md"
+            printf '%s\n' 'Update the centrally maintained stable Node, pnpm, Trivy, and Cosign releases. Shared CI regression tests and consumer rollout checks must pass before adoption.' > "$RUNNER_TEMP/runtime-pr.md"
+            gh pr create --head "$branch" --title 'ci: update shared tool versions' --body-file "$RUNNER_TEMP/runtime-pr.md"
           fi
           # The App token emits normal PR events, so regression checks run automatically.
