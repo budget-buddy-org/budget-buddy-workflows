@@ -19,17 +19,17 @@ test('digest handoff rejects mixed commits, versions, repositories, and duplicat
   assert.equal(immutableImage(record.image + '@' + digest), record.image + '@' + digest);
   assert.throws(() => immutableImage(record.image + ':latest'));
 });
-test('existing vulnerability gates are preserved, with unfixed CVEs and secrets handled correctly', () => {
+test('one vulnerability gate applies to both apps and both architectures', () => {
   const report = severity => ({ SchemaVersion: 2, Results: [{ Vulnerabilities: [{ VulnerabilityID: 'CVE-fixture', Severity: severity, FixedVersion: '2.0' }] }] });
-  assert.equal(blockingFindings(report('HIGH'), repo, 'linux/amd64').length, 0);
-  assert.equal(blockingFindings(report('CRITICAL'), repo, 'linux/amd64').length, 1);
-  assert.equal(blockingFindings(report('CRITICAL'), repo, 'linux/arm64').length, 0);
-  assert.equal(blockingFindings(report('CRITICAL'), 'budget-buddy-org/budget-buddy-api', 'linux/amd64').length, 0);
-  const unfixed = report('CRITICAL'); delete unfixed.Results[0].Vulnerabilities[0].FixedVersion;
-  assert.equal(blockingFindings(unfixed, repo, 'linux/amd64').length, 0);
-  assert.equal(blockingFindings({ SchemaVersion: 2, Results: [{ Secrets: [{ RuleID: 'fixture', Severity: 'CRITICAL' }] }] }, repo, 'linux/amd64').length, 1);
-  assert.throws(() => blockingFindings({}, repo, 'linux/amd64'));
-  assert.throws(() => blockingFindings(report('HIGH'), 'unknown/repository', 'linux/amd64'));
+  for (const target of ['linux/amd64', 'linux/arm64']) {
+    assert.equal(blockingFindings(report('HIGH'), target).length, 0);
+    assert.equal(blockingFindings(report('CRITICAL'), target).length, 1);
+    const unfixed = report('CRITICAL'); delete unfixed.Results[0].Vulnerabilities[0].FixedVersion;
+    assert.equal(blockingFindings(unfixed, target).length, 0);
+    assert.equal(blockingFindings({ SchemaVersion: 2, Results: [{ Secrets: [{ RuleID: 'fixture', Severity: 'CRITICAL' }] }] }, target).length, 1);
+  }
+  assert.throws(() => blockingFindings({}, 'linux/amd64'));
+  assert.throws(() => blockingFindings(report('HIGH'), 'windows/amd64'));
 });
 test('index validation requires both real Linux platforms and binds source/version', () => {
   const index = { manifests: ['amd64', 'arm64'].map(architecture => ({ platform: { os: 'linux', architecture } })), annotations: { 'org.opencontainers.image.revision': sha, 'org.opencontainers.image.version': '1.2.3' } };

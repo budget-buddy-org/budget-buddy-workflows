@@ -103,6 +103,6 @@ jobs:
           import { readFileSync } from 'node:fs';
           import { blockingFindings } from './scripts/images.mjs';
           const report = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/image-scan-linux-amd64/trivy.json', 'utf8'));
-          assert.ok(blockingFindings(report, process.env.GITHUB_REPOSITORY, 'linux/amd64').length > 0);
+          assert.ok(blockingFindings(report, 'linux/amd64').length > 0);
           assert.equal(process.env.SCAN_OUTCOME, 'failure');
           JS

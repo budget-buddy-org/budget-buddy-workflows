@@ -49,10 +49,9 @@ export function validateRecords(records, repository, expectedVersion, sha, expec
   }
   return records;
 }
-export function blockingFindings(report, repository, target) {
+export function blockingFindings(report, target) {
   platform(target);
-  const severities = policies[repository]?.[target];
-  if (!severities) throw new Error('No reviewed container policy for this repository');
+  const severities = policies.blockingSeverities;
   if (report.SchemaVersion !== 2 || (report.Results !== undefined && !Array.isArray(report.Results))) throw new Error('Invalid Trivy report');
   return (report.Results ?? []).flatMap(result => [
     ...(result.Vulnerabilities ?? []).filter(item => item.FixedVersion && severities.includes(item.Severity)),
@@ -84,12 +83,6 @@ function emit(values) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const env = process.env;
   switch (process.argv[2]) {
-    case 'versions': {
-      const versions = JSON.parse(readFileSync(new URL('../runtime-versions.json', import.meta.url), 'utf8'));
-      for (const value of Object.values(versions)) version(value);
-      emit(versions);
-      break;
-    }
     case 'metadata': {
       const v = versionFrom(readFileSync(env.VERSION_FILE, 'utf8'), env.VERSION_FILE);
       const sha = sourceSha(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
@@ -101,8 +94,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         const tagged = execFileSync('git', ['rev-parse', `refs/tags/${tag}^{commit}`], { encoding: 'utf8' }).trim();
         if (tagged !== sha) throw new Error('Checkout does not match the release tag');
       }
-      const versions = JSON.parse(readFileSync(new URL('../runtime-versions.json', import.meta.url), 'utf8'));
-      emit({ image: image(env.GITHUB_REPOSITORY), version: v, 'source-sha': sha, 'node-version': versions.node, 'pnpm-version': versions.pnpm });
+      emit({ image: image(env.GITHUB_REPOSITORY), version: v, 'source-sha': sha });
       break;
     }
     case 'record': {
@@ -126,14 +118,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     case 'scan-paths': {
       immutableImage(env.IMAGE_REF);
       platform(env.IMAGE_PLATFORM);
-      if (!policies[env.GITHUB_REPOSITORY]?.[env.IMAGE_PLATFORM]) throw new Error('No reviewed image policy');
       const directory = join(env.RUNNER_TEMP, 'image-scan-' + env.IMAGE_PLATFORM.replace('/', '-'));
       mkdirSync(directory, { recursive: true });
       emit({ json: join(directory, 'trivy.json'), sarif: join(directory, 'trivy.sarif'), category: 'trivy-' + env.IMAGE_PLATFORM.split('/')[1] });
       break;
     }
     case 'gate': {
-      const findings = blockingFindings(JSON.parse(readFileSync(process.argv[3], 'utf8')), env.GITHUB_REPOSITORY, env.IMAGE_PLATFORM);
+      const findings = blockingFindings(JSON.parse(readFileSync(process.argv[3], 'utf8')), env.IMAGE_PLATFORM);
       for (const item of findings) console.log(`Blocking finding: ${item.VulnerabilityID ?? item.RuleID ?? 'secret'} (${item.Severity})`);
       console.log(`${findings.length} blocking image findings.`);
       if (findings.length) process.exitCode = 1;

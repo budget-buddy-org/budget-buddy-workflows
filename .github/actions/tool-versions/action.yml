@@ -19,5 +19,13 @@ runs:
     - id: versions
       shell: bash
       env:
-        IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
-      run: node "$IMAGE_HELPER" versions
+        VERSIONS_FILE: ${{ github.action_path }}/../../../runtime-versions.json
+      run: |
+        node --input-type=commonjs - <<'JS'
+        const fs = require('node:fs');
+        const versions = JSON.parse(fs.readFileSync(process.env.VERSIONS_FILE));
+        for (const [name, value] of Object.entries(versions)) {
+          if (!/^\d+\.\d+\.\d+$/.test(value)) throw new Error('Invalid ' + name + ' version');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+        }
+        JS

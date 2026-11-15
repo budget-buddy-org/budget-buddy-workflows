@@ -62,7 +62,7 @@ flowchart LR
 
 Platform records bind the repository, version, source SHA, architecture, and registry digest. Missing, duplicated, or mixed records fail publication. Records are retained for three days and replaced on build reruns.
 
-The [reviewed vulnerability policy](container-policy.json) preserves existing gates: API reports fixed HIGH/CRITICAL findings without blocking on them; web amd64 blocks fixed CRITICAL findings, while arm64 reports findings. Scan infrastructure failures fail the job. Available SARIF is uploaded before applying the vulnerability gate, including when a scan fails.
+One [vulnerability policy](container-policy.json) applies to both apps on both architectures: fixed CRITICAL findings and CRITICAL secrets block publication; HIGH findings are reported. Unfixed CVEs are excluded. Callers cannot override this policy. Scan infrastructure failures fail the job. Available SARIF is uploaded before applying the vulnerability gate, including when a scan fails.
 
 Manual image runs default to candidate mode and only create `ci-<run>-<attempt>` tags. Candidate validation pulls both architectures and verifies tag-copy digest preservation. Production mode requires the matching source release tag. The signed index is promoted to its exact version, with architecture aliases retained. Only the current GitHub latest release updates `latest` and the minor-series alias. An existing version tag with different content is rejected.
 

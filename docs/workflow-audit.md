@@ -29,6 +29,6 @@ Claude review/interactive workflows retain the vendor action version and reposit
 
 ## Signing/deployment audit
 
-The API and web retain their build technologies and now share the manifest, scan, signature, and promotion implementation. Their pre-existing vulnerability policies are recorded explicitly in `container-policy.json`. Web gains arm64 reporting without a new blocking severity.
+The API and web retain their build technologies and now share the manifest, scan, signature, and promotion implementation. At the user’s request for common configuration, both now use one policy in `container-policy.json`: fixed CRITICAL findings block on both architectures, HIGH findings are reported, and unfixed CVEs are excluded. This strengthens the former API/report-only and web/arm64 exceptions without weakening the web amd64 gate.
 
 No Cosign certificate-identity allowlist was found in the deployment repository. The new reusable publisher identity and caller-repository checks are documented in the README. Production images keep the existing GHCR repository names and stable version/latest access pattern.

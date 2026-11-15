@@ -1,14 +1,3 @@
 {
-  "budget-buddy-org/budget-buddy-api": {
-    "linux/amd64": [],
-    "linux/arm64": []
-  },
-  "budget-buddy-org/budget-buddy-web-app": {
-    "linux/amd64": ["CRITICAL"],
-    "linux/arm64": []
-  },
-  "budget-buddy-org/ci-workflows": {
-    "linux/amd64": ["CRITICAL", "HIGH"],
-    "linux/arm64": ["CRITICAL", "HIGH"]
-  }
+  "blockingSeverities": ["CRITICAL"]
 }

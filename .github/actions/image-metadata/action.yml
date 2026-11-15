@@ -22,13 +22,15 @@ outputs:
     value: ${{ steps.metadata.outputs.source-sha }}
   node-version:
     description: Shared Node version for Docker builds
-    value: ${{ steps.metadata.outputs.node-version }}
+    value: ${{ steps.versions.outputs.node }}
   pnpm-version:
     description: Shared pnpm version for Docker builds
-    value: ${{ steps.metadata.outputs.pnpm-version }}
+    value: ${{ steps.versions.outputs.pnpm }}
 runs:
   using: composite
   steps:
+    - uses: $/.github/actions/tool-versions
+      id: versions
     - id: metadata
       shell: bash
       env:
