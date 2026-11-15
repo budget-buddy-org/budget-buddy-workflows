@@ -39,6 +39,8 @@ test('PR validation stays read-only and runtime updates are trusted-event-only',
   assert.equal(app.with['permission-contents'], 'write');
   assert.equal(app.with['permission-pull-requests'], 'write');
   assert.equal(app.with.repositories, '${{ github.event.repository.name }}');
+  const checkout = update.jobs.update.steps.find(step => step.uses?.startsWith('actions/checkout@'));
+  assert.equal(checkout.with.ref, '${{ github.event.repository.default_branch }}');
 });
 
 test('all third-party action dependencies are immutable commits', () => {
