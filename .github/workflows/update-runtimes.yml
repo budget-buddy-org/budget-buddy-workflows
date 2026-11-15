@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-  actions: write
+  contents: read
 
 concurrency:
   group: runtime-updates
@@ -19,15 +17,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check update App credentials
+        id: credentials
+        env:
+          CONFIGURED: ${{ secrets.RELEASE_BOT_ID != '' && secrets.RELEASE_BOT_PRIVATE_KEY != '' }}
+        run: echo "configured=$CONFIGURED" >> "$GITHUB_OUTPUT"
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: steps.credentials.outputs.configured == 'true'
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
       - name: Look up stable releases and propose an update
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          UPDATE_APP_CONFIGURED: ${{ steps.credentials.outputs.configured }}
         run: |
           node scripts/update-runtimes.mjs
           if git diff --quiet -- runtime-versions.json; then
             echo 'Runtime versions are current.'
             exit 0
+          fi
+          if [[ "$UPDATE_APP_CONFIGURED" != 'true' ]]; then
+            echo 'Configure RELEASE_BOT_ID and RELEASE_BOT_PRIVATE_KEY for ci-workflows to open runtime-update PRs without enabling workflow review approval.' >&2
+            exit 1
           fi
           branch=ci/update-runtimes
           git switch -c "$branch"
@@ -42,5 +62,4 @@ jobs:
             printf '%s\n' 'Update the centrally maintained stable Node/pnpm releases. Shared CI regression tests and consumer rollout checks must pass before adoption.' > "$RUNNER_TEMP/runtime-pr.md"
             gh pr create --head "$branch" --title 'ci: update shared Node and pnpm runtimes' --body-file "$RUNNER_TEMP/runtime-pr.md"
           fi
-          # PR events emitted by GITHUB_TOKEN do not start other workflows.
-          gh workflow run validate.yml --ref "$branch"
+          # The App token emits normal PR events, so regression checks run automatically.
