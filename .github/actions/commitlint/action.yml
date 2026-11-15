@@ -1,0 +1,9 @@
+name: Check conventional commits
+description: One title and commit policy for PR, push, manual, and Dependabot events
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        COMMITLINT_SCRIPT: ${{ github.action_path }}/../../../scripts/commitlint.mjs
+      run: node "$COMMITLINT_SCRIPT"

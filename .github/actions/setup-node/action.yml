@@ -1,0 +1,51 @@
+name: Set up Budget Buddy Node tooling
+description: Centrally versioned Node and pnpm, package authentication, cache, and frozen installation
+inputs:
+  working-directory:
+    description: Directory containing package.json and pnpm-lock.yaml
+    default: '.'
+  ignore-scripts:
+    description: Disable lifecycle scripts for tooling-only jobs
+    default: 'false'
+outputs:
+  node-version:
+    description: Installed Node version
+    value: ${{ steps.versions.outputs.node }}
+  pnpm-version:
+    description: Installed pnpm version
+    value: ${{ steps.versions.outputs.pnpm }}
+runs:
+  using: composite
+  steps:
+    - id: versions
+      shell: bash
+      env:
+        VERSIONS_FILE: ${{ github.action_path }}/../../../runtime-versions.json
+      run: |
+        node --input-type=commonjs -e 'const fs = require("node:fs"); const v = JSON.parse(fs.readFileSync(process.env.VERSIONS_FILE)); for (const name of ["node", "pnpm"]) { if (!/^\d+\.\d+\.\d+$/.test(v[name])) throw new Error("Invalid " + name + " version"); fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${v[name]}\n`); }'
+    - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      with:
+        version: ${{ steps.versions.outputs.pnpm }}
+        package_json_file: ${{ inputs.working-directory }}/package.json
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ steps.versions.outputs.node }}
+        cache: pnpm
+        cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+        registry-url: https://npm.pkg.github.com
+        scope: '@budget-buddy-org'
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        NODE_AUTH_TOKEN: ${{ github.token }}
+        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+      run: |
+        args=(--frozen-lockfile)
+        if [[ "$IGNORE_SCRIPTS" == 'true' ]]; then
+          args+=(--ignore-scripts)
+        elif [[ "$IGNORE_SCRIPTS" != 'false' ]]; then
+          echo 'ignore-scripts must be true or false' >&2
+          exit 1
+        fi
+        pnpm install "${args[@]}"

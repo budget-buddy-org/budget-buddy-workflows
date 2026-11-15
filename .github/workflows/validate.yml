@@ -1,0 +1,44 @@
+name: Validate shared CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate workflow syntax
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz' > "$RUNNER_TEMP/actionlint.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum --check actionlint.sha256)
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          # GitHub supports $/ action references at the workflow's own commit.
+          # actionlint 1.7.12 predates that syntax; suppress only its ref-format error.
+          "$RUNNER_TEMP/actionlint" -color -ignore 'specifying action "\$/\.github/actions/[a-z-]+" in invalid format because ref is missing'
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: $/.github/actions/setup-node
+        with:
+          working-directory: tests/fixtures/node
+          ignore-scripts: 'true'
+      - name: Exercise real commitlint with consumer event fixtures
+        run: node --test tests/*.test.mjs
