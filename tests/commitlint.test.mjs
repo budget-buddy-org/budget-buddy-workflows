@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, symlinkSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -27,14 +27,19 @@ test('real commitlint handles event policy and untrusted title text', () => {
     const path = join(cwd, 'event.json');
     writeFileSync(path, JSON.stringify(event));
     const result = run(process.execPath, [script], {
-      env: { ...process.env, GITHUB_EVENT_NAME: name, GITHUB_ACTOR: actor, GITHUB_EVENT_PATH: path },
+      cwd: fixture,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: name,
+        GITHUB_ACTOR: actor,
+        GITHUB_EVENT_PATH: path,
+        GIT_DIR: join(cwd, '.git'),
+        GIT_WORK_TREE: cwd,
+      },
     });
     assert.equal(result.status === 0, expected === 0, result.stdout + result.stderr);
   }
   try {
-    cpSync(join(fixture, 'package.json'), join(cwd, 'package.json'));
-    cpSync(join(fixture, '.commitlintrc.cjs'), join(cwd, '.commitlintrc.cjs'));
-    symlinkSync(join(fixture, 'node_modules'), join(cwd, 'node_modules'), 'dir');
     git('init', '-b', 'main');
     const base = commit('chore: initialize fixture');
     const good = commit('ci: valid consumer commit');
