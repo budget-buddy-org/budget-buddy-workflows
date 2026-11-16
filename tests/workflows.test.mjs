@@ -96,3 +96,36 @@ test('container signing and publication are unavailable to PR or push events', (
   assert.equal(enabled({ event_name: 'workflow_dispatch' }, { containers: true }), true);
   assert.equal(enabled({ event_name: 'workflow_dispatch' }, { containers: false }), false);
 });
+
+test('candidate image workflows never receive registry write, OIDC, or release credentials', () => {
+  for (const name of ['gradle-image-check', 'web-image-check']) {
+    const candidate = workflow(name);
+    assert.deepEqual(candidate.permissions, { contents: 'read', packages: 'read' });
+    assert.deepEqual(Object.keys(candidate.on), ['workflow_call']);
+    assert.equal(candidate.on.workflow_call?.secrets, undefined);
+    for (const step of candidate.jobs.image.steps) {
+      assert.doesNotMatch(step.uses ?? '', /sign-image|publish-image|setup-container/);
+      if (step.uses?.startsWith('docker/build-push-action')) {
+        assert.equal(step.with.push, false);
+        assert.equal(step.with.load, true);
+      }
+    }
+    assert.equal(candidate.jobs.image.steps.find(step => step.uses === '$/.github/actions/scan-image').with['upload-sarif'], 'false');
+  }
+});
+
+test('rollout automation accepts only successful same-repository main push validation', () => {
+  const rollout = workflow('rollout-consumers');
+  const allowed = new Function('github', `return (${rollout.jobs.select.if});`);
+  const event = { event: 'push', conclusion: 'success', head_repository: { full_name: 'org/ci' } };
+  const github = { event_name: 'workflow_run', repository: 'org/ci', event: { workflow_run: event } };
+  assert.equal(allowed(github), true);
+  for (const change of [{ event: 'pull_request' }, { conclusion: 'failure' }, { head_repository: { full_name: 'fork/ci' } }]) {
+    assert.equal(allowed({ ...github, event: { workflow_run: { ...event, ...change } } }), false);
+  }
+  assert.deepEqual(rollout.on.workflow_run.branches, ['main']);
+  assert.equal(rollout.permissions.contents, 'read');
+  const token = rollout.jobs.update.steps.find(step => step.id === 'app');
+  assert.equal(token.with.repositories, '${{ matrix.consumer }}');
+  assert.equal(token.with['permission-workflows'], 'write');
+});

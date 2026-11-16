@@ -1,0 +1,85 @@
+name: Coordinate consumer updates
+on:
+  workflow_run:
+    workflows: [Validate shared CI]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '47 8 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  packages: read
+concurrency:
+  group: consumer-rollout
+  cancel-in-progress: false
+jobs:
+  select:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.select.outputs.revision }}
+      consumers: ${{ steps.select.outputs.consumers }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/rollout-consumers.mjs select
+  update:
+    needs: select
+    strategy:
+      fail-fast: false
+      matrix:
+        consumer: ${{ fromJSON(needs.select.outputs.consumers) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.select.outputs.revision }}
+          persist-credentials: false
+      - id: versions
+        run: |
+          node --input-type=commonjs - <<'JS'
+          const fs = require('node:fs');
+          for (const [key, value] of Object.entries(JSON.parse(fs.readFileSync('runtime-versions.json')))) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          }
+          JS
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          registry-url: https://npm.pkg.github.com
+          scope: '@budget-buddy-org'
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: ${{ steps.versions.outputs.pnpm }}
+          package_json_file: tests/fixtures/node/package.json
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: budget-buddy-org
+          repositories: ${{ matrix.consumer }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: budget-buddy-org/${{ matrix.consumer }}
+          ref: main
+          path: consumer
+          token: ${{ steps.app.outputs.token }}
+      - name: Propose one consistent consumer update
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          LIBRARY_REVISION: ${{ needs.select.outputs.revision }}
+          CONSUMER: ${{ matrix.consumer }}
+        run: node scripts/rollout-consumers.mjs update

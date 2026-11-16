@@ -1,0 +1,9 @@
+name: Check shared CI consistency
+description: Enforce one library revision and matching package-manager and Docker runtime metadata
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        POLICY_SCRIPT: ${{ github.action_path }}/../../../scripts/consumer-policy.mjs
+      run: node "$POLICY_SCRIPT" check

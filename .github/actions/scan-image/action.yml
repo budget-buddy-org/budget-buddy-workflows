@@ -3,12 +3,15 @@ description: Report fixed HIGH/CRITICAL findings and enforce the centrally revie
 inputs:
   image-ref:
     description: Immutable image reference
-    required: true
+    required: false
+  image-archive:
+    description: Local docker-save archive, mutually exclusive with image-ref
+    required: false
   platform:
     description: Target platform
     required: true
   upload-sarif:
-    description: Disable only for deliberately vulnerable regression fixtures
+    description: Disable for read-only PR checks and deliberately vulnerable fixtures
     default: 'true'
 runs:
   using: composite
@@ -20,6 +23,7 @@ runs:
       env:
         IMAGE_HELPER: ${{ github.action_path }}/../../../scripts/images.mjs
         IMAGE_REF: ${{ inputs.image-ref }}
+        IMAGE_ARCHIVE: ${{ inputs.image-archive }}
         IMAGE_PLATFORM: ${{ inputs.platform }}
       run: node "$IMAGE_HELPER" scan-paths
     - name: Scan image
@@ -30,6 +34,7 @@ runs:
       with:
         version: v${{ steps.tools.outputs.trivy }}
         image-ref: ${{ inputs.image-ref }}
+        input: ${{ inputs.image-archive }}
         format: json
         output: ${{ steps.paths.outputs.json }}
         exit-code: '0'

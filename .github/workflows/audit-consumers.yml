@@ -1,0 +1,49 @@
+name: Audit consumer alignment
+on:
+  schedule:
+    - cron: '17 9 * * 2'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/rollout-consumers.mjs select
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.target.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: budget-buddy-org/budget-buddy-api
+          ref: main
+          path: consumers/api
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: budget-buddy-org/budget-buddy-web-app
+          ref: main
+          path: consumers/web
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: budget-buddy-org/budget-buddy-contracts
+          ref: main
+          path: consumers/contracts
+          persist-credentials: false
+      - name: Require all default branches to match the validated library
+        env:
+          LIBRARY_REVISION: ${{ steps.target.outputs.revision }}
+        run: |
+          for consumer in consumers/*; do
+            node scripts/consumer-policy.mjs check "$consumer"
+          done
