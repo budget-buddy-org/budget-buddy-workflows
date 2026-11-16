@@ -44,7 +44,13 @@ jobs:
           ref: ${{ needs.select.outputs.revision }}
           persist-credentials: false
       - id: versions
-        run: node -e 'const fs = require("node:fs"); for (const [key, value] of Object.entries(JSON.parse(fs.readFileSync("runtime-versions.json")))) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`)'
+        run: |
+          node --input-type=commonjs - <<'JS'
+          const fs = require('node:fs');
+          for (const [key, value] of Object.entries(JSON.parse(fs.readFileSync('runtime-versions.json')))) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          }
+          JS
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ steps.versions.outputs.node }}
