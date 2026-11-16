@@ -1,0 +1,48 @@
+name: Validate Gradle container
+on:
+  workflow_call:
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: container-check-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  image:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup-gradle
+      - name: Build on the native platform without publishing
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./gradlew bootBuildImage -x test --imagePlatform="$PLATFORM" --imageName=ci-candidate:check
+      - name: Save local image for the common vulnerability gate
+        run: docker save --output "$RUNNER_TEMP/candidate.tar" ci-candidate:check
+      - uses: $/.github/actions/scan-image
+        with:
+          image-archive: ${{ runner.temp }}/candidate.tar
+          platform: ${{ matrix.platform }}
+          upload-sarif: 'false'
+      - name: Retain scan reports even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-scan-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image-scan-*/trivy.*
+          if-no-files-found: ignore
+          retention-days: 3

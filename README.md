@@ -80,7 +80,11 @@ Verification checks the exact signer identity, `https://token.actions.githubuser
 
 ## Compatibility and updates
 
-Consumers pin full SHAs and have weekly `github-actions` Dependabot updates enabled. GitHub documents that [untagged commit pins are updated to the latest commit](https://docs.github.com/en/actions/reference/security/secure-use), including reusable workflows. Runtime adoption also updates the consumer's `packageManager` declaration and lock metadata; its frozen-install and build checks must pass together.
+Consumers pin full SHAs. After successful validation of library `main`, `rollout-consumers.yml` selects that exact commit and opens one matching update PR in contracts, API and web. It also reconciles `packageManager`, pnpm lock metadata and the web Docker Node default. Lockfile regeneration disables lifecycle scripts and pnpm hooks. Existing rollout PRs are preserved until reviewed; a weekly run retries missed or partial rollouts. Merging remains subject to consumer checks and review.
+
+The coordinator uses the existing App, with contents, pull-request and workflows write permission scoped to one consumer per job. It never checks out PR code or consumes PR artifacts. Normal workflow tokens stay read-only except for package reads. The App must be installed on all three consumer repositories and have Workflows write permission to update `.github/workflows`.
+
+Dependabot continues maintaining third-party dependencies; shared-library references are excluded because updating them alone can break the runtime/lockfile contract. `CI policy` runs on every consumer PR and main push and rejects mixed/floating library references or mismatched runtime metadata. The weekly `Audit consumer alignment` job also checks all three default branches against validated library main. An audit failure during pending rollout PRs means the rollout still needs review and merge; it does not silently rewrite branches.
 
 Treat changes to required inputs/secrets, outputs, check names, artifact formats, or release/security policy as breaking interface changes. Publish the library commit first, migrate callers in explicit PRs, run their real jobs and previews, then merge consumers. Compatible fixes still require library regression checks and relevant consumer validation. Credentials remain explicit and scoped to the caller.
 
@@ -104,3 +108,11 @@ gh workflow run validate.yml --ref BRANCH --field containers=true
 It builds and pulls both architectures, reports scans, verifies the reusable signer and digest-preserving tag copy, and requires real vulnerability findings to reject an intentionally old image. Deliberate vulnerable-fixture SARIF is not published to the Security tab. Privileged fixture jobs do not run on PR events.
 
 See the [specialized-workflow audit](docs/workflow-audit.md) and [verification record](docs/verification.md).
+
+## Automatic image validation
+
+API and web use thin `container-check.yml` callers for stack-specific reusable checks. Relevant PR changes build on native amd64/arm64 runners and scan local image archives with the same fixed-CRITICAL gate as production. Web runs the same startup/config/routing smoke script used in publishing. Scan reports are retained as Actions artifacts on failure.
+
+These checks use only contents/package read permissions, never registry writes, signing, release credentials or `pull_request_target`. PR caches have a separate prefix from release caches. Forks use their normal restricted token; private-package access remains subject to GitHub's package permissions. Full signing, registry handoff and tag promotion remain covered by trusted candidate/manual and genuine release runs.
+
+For branch protection, require `policy / policy` in all three repositories. Image matrix checks are path-filtered and should not be required globally on unrelated PRs. The coordinator opens reviewable PRs and never bypasses branch rules or enables workflow approval.

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -116,7 +116,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       break;
     }
     case 'scan-paths': {
-      immutableImage(env.IMAGE_REF);
+      if (Boolean(env.IMAGE_REF) === Boolean(env.IMAGE_ARCHIVE)) throw new Error('Provide exactly one image reference or archive');
+      if (env.IMAGE_ARCHIVE) {
+        if (!statSync(env.IMAGE_ARCHIVE).isFile()) throw new Error('Image archive must be a file');
+      } else immutableImage(env.IMAGE_REF);
       platform(env.IMAGE_PLATFORM);
       const directory = join(env.RUNNER_TEMP, 'image-scan-' + env.IMAGE_PLATFORM.replace('/', '-'));
       mkdirSync(directory, { recursive: true });

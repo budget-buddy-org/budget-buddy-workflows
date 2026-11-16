@@ -1,0 +1,64 @@
+name: Validate web container
+on:
+  workflow_call:
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: container-check-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  image:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/tool-versions
+        id: versions
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          tags: ci-candidate:check
+          load: true
+          push: false
+          provenance: false
+          build-args: |
+            NODE_VERSION=${{ steps.versions.outputs.node }}
+            PNPM_VERSION=${{ steps.versions.outputs.pnpm }}
+          secrets: github_token=${{ github.token }}
+          cache-from: type=gha,scope=pr-buildx-${{ matrix.arch }}
+          cache-to: type=gha,scope=pr-buildx-${{ matrix.arch }},mode=max
+      - name: Verify native startup and runtime configuration
+        env:
+          IMAGE_REF: ci-candidate:check
+          PLATFORM: ${{ matrix.platform }}
+        run: sh docker/smoke-test.sh
+      - name: Save local image for the common vulnerability gate
+        run: docker save --output "$RUNNER_TEMP/candidate.tar" ci-candidate:check
+      - uses: $/.github/actions/scan-image
+        with:
+          image-archive: ${{ runner.temp }}/candidate.tar
+          platform: ${{ matrix.platform }}
+          upload-sarif: 'false'
+      - name: Retain scan reports even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-scan-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image-scan-*/trivy.*
+          if-no-files-found: ignore
+          retention-days: 3
