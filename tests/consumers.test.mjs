@@ -13,7 +13,7 @@ function fixture() {
   writeFileSync(join(root, '.github/workflows/ci.yml'), `jobs:\n  ci:\n    uses: budget-buddy-org/ci-workflows/.github/workflows/web-ci.yml@${sha}\n`);
   writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: 'pnpm@12.21.0', scripts: { test: 'do-not-change' } }, null, 2));
   writeFileSync(join(root, 'pnpm-lock.yaml'), '    packageManagerDependencies:\n      pnpm:\n        specifier: 12.21.0\n        version: 12.21.0\n');
-  writeFileSync(join(root, 'Dockerfile'), 'ARG NODE_VERSION=26.13.1\nFROM node:${NODE_VERSION}-alpine\n');
+  writeFileSync(join(root, 'Dockerfile'), 'FROM cgr.dev/chainguard/node:latest-dev\n');
   return root;
 }
 test('consistency rejects mixed refs, floating refs and mismatched runtime metadata', () => {
@@ -26,7 +26,8 @@ test('consistency rejects mixed refs, floating refs and mismatched runtime metad
     }
     rmSync(join(root, '.github/workflows/other.yml'));
     assert.throws(() => checkConsumer(root, sha, { ...versions, pnpm: '12.22.0' }), /packageManager/);
-    assert.throws(() => checkConsumer(root, sha, { ...versions, node: '27.0.0' }), /Docker/);
+    writeFileSync(join(root, 'Dockerfile'), 'FROM node:alpine\n');
+    assert.throws(() => checkConsumer(root, sha, versions), /Docker/);
     writeFileSync(join(root, 'pnpm-lock.yaml'), '');
     assert.throws(() => checkConsumer(root, sha, versions), /lockfile/);
   } finally { rmSync(root, { recursive: true }); }
@@ -38,7 +39,7 @@ test('coordinated edits preserve app scripts and require lock refresh only on pn
     assert.equal(checkConsumer(root, next, versions).revision, next);
     assert.equal(updateConsumer(root, next, { node: '27.0.0', pnpm: '12.22.0' }), true);
     assert.equal(JSON.parse(readFileSync(join(root, 'package.json'))).scripts.test, 'do-not-change');
-    assert.match(readFileSync(join(root, 'Dockerfile'), 'utf8'), /NODE_VERSION=27.0.0/);
+    assert.match(readFileSync(join(root, 'Dockerfile'), 'utf8'), /chainguard\/node:latest-dev/);
     assert.throws(() => updateConsumer(root, 'main', versions));
   } finally { rmSync(root, { recursive: true }); }
 });

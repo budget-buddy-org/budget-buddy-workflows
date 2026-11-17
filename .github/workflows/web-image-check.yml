@@ -37,7 +37,6 @@ jobs:
           push: false
           provenance: false
           build-args: |
-            NODE_VERSION=${{ steps.versions.outputs.node }}
             PNPM_VERSION=${{ steps.versions.outputs.pnpm }}
           secrets: github_token=${{ github.token }}
           cache-from: type=gha,scope=pr-buildx-${{ matrix.arch }}
