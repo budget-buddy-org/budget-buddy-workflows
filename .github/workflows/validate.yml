@@ -45,6 +45,10 @@ jobs:
         with:
           working-directory: tests/fixtures/node
           ignore-scripts: 'true'
+      - uses: $/.github/actions/setup-node
+        with:
+          working-directory: release
+          ignore-scripts: 'true'
       - name: Exercise real commitlint with consumer event fixtures
         run: node --test tests/*.test.mjs
   containers:
