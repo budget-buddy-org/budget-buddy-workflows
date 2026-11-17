@@ -1,0 +1,24 @@
+name: Managed release
+description: Run centrally locked release tooling against the consumer checkout
+inputs:
+  profile:
+    description: Release profile (gradle-app, web-app, contracts)
+    required: true
+  dry-run:
+    description: Preview without preparing or publishing
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/setup-node
+      with:
+        working-directory: ${{ github.action_path }}/../../../release
+        ignore-scripts: 'true'
+    - name: Run managed release
+      shell: bash
+      env:
+        RELEASE_RUNNER: ${{ github.action_path }}/../../../release/run.mjs
+        RELEASE_PROFILE: ${{ inputs.profile }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        PREVIEW_BRANCH: ${{ github.ref_name }}
+      run: node "$RELEASE_RUNNER"

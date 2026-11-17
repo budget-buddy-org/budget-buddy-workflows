@@ -116,3 +116,33 @@ API and web use thin `container-check.yml` callers for stack-specific reusable c
 These checks use only contents/package read permissions, never registry writes, signing, release credentials or `pull_request_target`. PR caches have a separate prefix from release caches. Forks use their normal restricted token; private-package access remains subject to GitHub's package permissions. Full signing, registry handoff and tag promotion remain covered by trusted candidate/manual and genuine release runs.
 
 For branch protection, require `policy / policy` in all three repositories. Image matrix checks are path-filtered and should not be required globally on unrelated PRs. The coordinator opens reviewable PRs and never bypasses branch rules or enables workflow approval.
+
+
+## Managed release migration
+
+The optional `profile` input on `release.yml` moves release configuration and
+tool dependencies into this library. Supported profiles are `gradle-app`,
+`web-app`, and `contracts`. Omitting it retains the existing consumer runner
+during migration. The managed action installs `release/pnpm-lock.yaml` with
+lifecycle scripts disabled and resolves plugins from that installation.
+
+Profiles currently preserve release commits, version files, changelogs, and
+contracts Swift generation. Contracts retains its existing analyzer defaults;
+API and web share their explicit release rules.
+
+Rollout order:
+1. Publish and validate this library revision.
+2. Pin a consumer to that revision and select its profile.
+3. Preview the release, then verify a real release and downstream publication.
+4. Remove that consumer's release configs, presets, and release dependencies.
+5. Migrate commitlint separately after configuring required PR-title checks and
+   squash merges. Update consumer policy before removing the API Node manifest.
+
+Keep source generation and application build dependencies in the consumer.
+The current workflow still installs consumer dependencies for release preparation.
+Removing tracked version files or changelogs is a separate migration because
+image metadata, web version reporting, and contracts publishing consume them.
+
+Run `pnpm --dir release install --frozen-lockfile --ignore-scripts` before
+`node --test tests/*.test.mjs`. Local tests cover plugin resolution and profile
+invariants; GitHub release previews and actual publication remain rollout gates.

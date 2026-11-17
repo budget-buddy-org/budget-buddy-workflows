@@ -2,6 +2,10 @@ name: Semantic release
 on:
   workflow_call:
     inputs:
+      profile:
+        description: Managed release profile; empty preserves legacy consumer configuration
+        type: string
+        default: ''
       dry-run:
         description: Preview the dispatched ref without preparing or publishing a release
         type: boolean
@@ -43,7 +47,17 @@ jobs:
       - uses: $/.github/actions/setup-node
       - name: Repository release checks
         run: pnpm run --if-present release:verify
+      - name: Managed release
+        if: inputs.profile != ''
+        uses: $/.github/actions/release
+        with:
+          profile: ${{ inputs.profile }}
+          dry-run: ${{ inputs.dry-run }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          NODE_AUTH_TOKEN: ${{ github.token }}
       - name: Release or preview
+        if: inputs.profile == ''
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NODE_AUTH_TOKEN: ${{ github.token }}
