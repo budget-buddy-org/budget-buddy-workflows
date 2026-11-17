@@ -146,3 +146,20 @@ image metadata, web version reporting, and contracts publishing consume them.
 Run `pnpm --dir release install --frozen-lockfile --ignore-scripts` before
 `node --test tests/*.test.mjs`. Local tests cover plugin resolution and profile
 invariants; GitHub release previews and actual publication remain rollout gates.
+
+## PR-title-only consumers
+
+Call `pr-title.yml` on PR opened, synchronize, reopened, and edited events.
+It uses the library's locked validator without checking out consumer code or
+installing consumer dependencies. The job retains the `commitlint` identifier
+for required-check compatibility. Push/manual events skip this PR-only job;
+build jobs must not depend on it.
+
+Before removing local hooks, require this check and configure squash-only merges
+with the PR title as the squash subject. Use `!` in the title for breaking
+changes so the signal survives squash merging. Ordinary branch commits are free
+form. The legacy commitlint workflow remains available during migration.
+
+Managed Gradle releases do not install consumer Node dependencies. Consumer
+policy and automatic rollout support Gradle projects without package.json or a
+pnpm lockfile.

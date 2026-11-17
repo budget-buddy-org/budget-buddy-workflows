@@ -49,3 +49,18 @@ test('rollouts require successful push validation of current main, never PR or s
     assert.throws(() => selectValidatedRevision(sha, [{ ...good, ...change }]));
   }
 });
+
+test('Gradle consumers can remove Node tooling without breaking coordinated updates', () => {
+  const root = fixture();
+  try {
+    rmSync(join(root, 'package.json'));
+    rmSync(join(root, 'pnpm-lock.yaml'));
+    rmSync(join(root, 'Dockerfile'));
+    assert.throws(() => checkConsumer(root, sha, versions), /Only Gradle/);
+    writeFileSync(join(root, 'build.gradle.kts'), '');
+    assert.equal(updateConsumer(root, next, versions), false);
+    assert.equal(checkConsumer(root, next, versions).revision, next);
+    writeFileSync(join(root, 'pnpm-lock.yaml'), 'stale');
+    assert.throws(() => checkConsumer(root, next, versions), /obsolete lockfile/);
+  } finally { rmSync(root, { recursive: true }); }
+});

@@ -41,7 +41,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (existing.length) { console.log(`Pending rollout: ${fullName}#${existing[0].number}; finish it before advancing`); process.exit(0); }
     git('config', 'user.name', 'github-actions[bot]');
     git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
-    git('add', '.github/workflows', 'package.json', 'pnpm-lock.yaml');
+    git('add', '-u');
     if (name === 'budget-buddy-web-app') git('add', 'Dockerfile');
     git('commit', '-m', 'ci: align shared workflows and runtime metadata');
     const previous = git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`).split(/\s/)[0];
