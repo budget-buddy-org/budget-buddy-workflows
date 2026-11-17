@@ -19,7 +19,10 @@ export function checkConsumer(root, revision, versions) {
   if (!manager || manager[1] !== versions.pnpm || manager[2] !== versions.pnpm) throw new Error('Regenerate pnpm lockfile metadata with the shared pnpm version');
   if (existsSync(join(root, 'Dockerfile'))) {
     const docker = readFileSync(join(root, 'Dockerfile'), 'utf8');
-    if (docker.match(/^ARG NODE_VERSION=(.+)$/m)?.[1] !== versions.node) throw new Error('Docker Node default differs from the shared version');
+    if (/^FROM (?:node:|cgr\.dev\/chainguard\/node:)/m.test(docker) &&
+        !docker.includes('FROM cgr.dev/chainguard/node:latest-dev')) {
+      throw new Error('Docker Node base must use Chainguard latest-dev');
+    }
   }
   return { revision, node: versions.node, pnpm: versions.pnpm, references: refs.length };
 }
@@ -34,8 +37,6 @@ export function updateConsumer(root, revision, versions) {
   const changed = pkg.packageManager !== `pnpm@${versions.pnpm}`;
   // Preserve unrelated formatting and package metadata.
   writeFileSync(file, readFileSync(file, 'utf8').replace(/("packageManager"\s*:\s*)"[^"]+"/, `$1"pnpm@${versions.pnpm}"`));
-  const docker = join(root, 'Dockerfile');
-  if (existsSync(docker)) writeFileSync(docker, readFileSync(docker, 'utf8').replace(/^ARG NODE_VERSION=.+$/m, `ARG NODE_VERSION=${versions.node}`));
   return changed;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
