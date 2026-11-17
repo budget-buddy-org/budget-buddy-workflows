@@ -20,6 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  title-fixture:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/pr-title.yml
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5

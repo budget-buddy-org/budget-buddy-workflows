@@ -17,22 +17,27 @@ outputs:
 runs:
   using: composite
   steps:
+    - id: directory
+      shell: bash
+      env:
+        TOOLING_DIRECTORY: ${{ inputs.working-directory }}
+      run: echo "path=$(realpath "$TOOLING_DIRECTORY")" >> "$GITHUB_OUTPUT"
     - uses: $/.github/actions/tool-versions
       id: versions
     - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       with:
         version: ${{ steps.versions.outputs.pnpm }}
-        package_json_file: ${{ inputs.working-directory }}/package.json
+        package_json_file: ${{ steps.directory.outputs.path }}/package.json
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ steps.versions.outputs.node }}
         cache: pnpm
-        cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+        cache-dependency-path: ${{ steps.directory.outputs.path }}/pnpm-lock.yaml
         registry-url: https://npm.pkg.github.com
         scope: '@budget-buddy-org'
     - name: Install dependencies
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      working-directory: ${{ steps.directory.outputs.path }}
       env:
         NODE_AUTH_TOKEN: ${{ github.token }}
         IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
