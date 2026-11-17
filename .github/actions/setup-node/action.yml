@@ -1,6 +1,9 @@
 name: Set up Budget Buddy Node tooling
 description: Centrally versioned Node and pnpm, package authentication, cache, and frozen installation
 inputs:
+  cache:
+    description: Cache workspace dependencies; disable for tooling outside the workspace
+    default: 'true'
   working-directory:
     description: Directory containing package.json and pnpm-lock.yaml
     default: '.'
@@ -31,7 +34,8 @@ runs:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ steps.versions.outputs.node }}
-        cache: pnpm
+        cache: ${{ inputs.cache == 'true' && 'pnpm' || '' }}
+        package-manager-cache: false
         cache-dependency-path: ${{ steps.directory.outputs.path }}/pnpm-lock.yaml
         registry-url: https://npm.pkg.github.com
         scope: '@budget-buddy-org'
