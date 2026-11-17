@@ -1,0 +1,14 @@
+name: Validate PR title
+description: Validate the squash commit title using centrally locked tooling
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/setup-node
+      with:
+        working-directory: ${{ github.action_path }}/../../../release
+        ignore-scripts: 'true'
+        cache: 'false'
+    - shell: bash
+      env:
+        TITLE_RUNNER: ${{ github.action_path }}/../../../release/pr-title.mjs
+      run: node "$TITLE_RUNNER"

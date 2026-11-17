@@ -1,0 +1,13 @@
+name: PR title
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  # Preserve the existing required-check name during migration.
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: $/.github/actions/pr-title
