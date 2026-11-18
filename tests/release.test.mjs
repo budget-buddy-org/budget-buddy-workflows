@@ -51,3 +51,22 @@ test('release analysis works without consumer dependencies and preserves version
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test('each managed profile renders real release notes with its installed writer and preset', async () => {
+  for (const profile of ['gradle-app', 'web-app', 'contracts']) {
+    const config = await configuration(profile);
+    const [module, options] = config.plugins.find(([path]) => path.includes('release-notes-generator'));
+    const { generateNotes } = await import(module);
+    const notes = await generateNotes(options, {
+      cwd: process.cwd(),
+      options: { repositoryUrl: 'https://github.com/budget-buddy-org/example.git' },
+      commits: [{ hash: 'a'.repeat(40), message: 'fix: correct rounding' }],
+      lastRelease: { version: '1.2.3', gitTag: 'v1.2.3', gitHead: 'b'.repeat(40) },
+      nextRelease: { version: '1.2.4', gitTag: 'v1.2.4', gitHead: 'c'.repeat(40) },
+      logger: { log() {} },
+    });
+    assert.match(notes, /correct rounding/);
+    assert.match(notes, /1\.2\.4/);
+    assert.match(notes, /Bug Fixes/);
+  }
+});
