@@ -4,7 +4,7 @@ import { configuration } from '../release/run.mjs';
 import { isAbsolute } from 'node:path';
 
 test('managed profiles resolve plugins from the locked tooling installation', async () => {
-  for (const profile of ['gradle-app', 'web-app', 'contracts']) {
+  for (const profile of ['application', 'gradle-app', 'web-app', 'contracts']) {
     const config = await configuration(profile);
     assert.deepEqual(config.branches, ['main']);
     for (const [plugin] of config.plugins) assert.ok(isAbsolute(plugin));
@@ -30,7 +30,7 @@ test('release analysis works without consumer dependencies and preserves version
   const { join } = await import('node:path');
   const cwd = mkdtempSync(join(tmpdir(), 'managed-release-'));
   try {
-    for (const profile of ['gradle-app', 'web-app', 'contracts']) {
+    for (const profile of ['application', 'gradle-app', 'web-app', 'contracts']) {
       const config = await configuration(profile);
       const [module, options] = config.plugins.find(([path]) => path.includes('commit-analyzer'));
       const { analyzeCommits } = await import(module);
@@ -56,4 +56,23 @@ test('application releases only tag and publish notes without modifying the sour
   const config = await configuration('application');
   assert.equal(config.plugins.length, 3);
   assert.ok(config.plugins.every(([plugin]) => !/changelog|semantic-release\/git\/|semantic-release\/npm\/|semantic-release\/exec\//.test(plugin)));
+});
+
+test('each managed profile renders real release notes with its installed writer and preset', async () => {
+  for (const profile of ['application', 'gradle-app', 'web-app', 'contracts']) {
+    const config = await configuration(profile);
+    const [module, options] = config.plugins.find(([path]) => path.includes('release-notes-generator'));
+    const { generateNotes } = await import(module);
+    const notes = await generateNotes(options, {
+      cwd: process.cwd(),
+      options: { repositoryUrl: 'https://github.com/budget-buddy-org/example.git' },
+      commits: [{ hash: 'a'.repeat(40), message: 'fix: correct rounding' }],
+      lastRelease: { version: '1.2.3', gitTag: 'v1.2.3', gitHead: 'b'.repeat(40) },
+      nextRelease: { version: '1.2.4', gitTag: 'v1.2.4', gitHead: 'c'.repeat(40) },
+      logger: { log() {} },
+    });
+    assert.match(notes, /correct rounding/);
+    assert.match(notes, /1\.2\.4/);
+    assert.match(notes, /Bug Fixes/);
+  }
 });
