@@ -51,3 +51,9 @@ test('release analysis works without consumer dependencies and preserves version
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test('application releases only tag and publish notes without modifying the source tree', async () => {
+  const config = await configuration('application');
+  assert.equal(config.plugins.length, 3);
+  assert.ok(config.plugins.every(([plugin]) => !/changelog|semantic-release\/git\/|semantic-release\/npm\/|semantic-release\/exec\//.test(plugin)));
+});

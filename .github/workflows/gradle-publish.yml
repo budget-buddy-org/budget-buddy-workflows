@@ -1,0 +1,100 @@
+name: Publish gradle image
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Source tag or ref to build
+        type: string
+        required: true
+      publish:
+        description: Promote production tags for a matching release tag
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: image-build-${{ github.repository }}-${{ inputs.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.metadata.outputs.image }}
+      version: ${{ steps.metadata.outputs.version }}
+      source-sha: ${{ steps.metadata.outputs.source-sha }}
+      node-version: ${{ steps.metadata.outputs.node-version }}
+      pnpm-version: ${{ steps.metadata.outputs.pnpm-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: $/.github/actions/image-metadata
+        id: metadata
+        with:
+          ref: ${{ inputs.ref }}
+          publish: ${{ inputs.publish }}
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.source-sha }}
+      - uses: $/.github/actions/setup-container
+      - uses: $/.github/actions/setup-gradle
+      - name: Build and push a staging image on the native platform
+        id: build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          tag="$IMAGE:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$ARCH"
+          ./gradlew bootBuildImage -x test -PreleaseVersion="$RELEASE_VERSION" --imagePlatform="$PLATFORM" --imageName="$tag"
+          docker push "$tag"
+          ref=$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')
+          # Buildpacks emit Docker media types; export OCI before the shared
+          # publisher adds source/version annotations to the final index.
+          docker buildx build --platform "$PLATFORM" \
+            --output "type=image,name=$tag,push=true,oci-mediatypes=true" \
+            --metadata-file "$RUNNER_TEMP/image.json" - <<EOF
+          FROM $ref
+          EOF
+          digest=$(jq -r '.["containerimage.digest"]' "$RUNNER_TEMP/image.json")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: $/.github/actions/image-record
+        with:
+          digest: ${{ steps.build.outputs.digest }}
+          platform: ${{ matrix.platform }}
+          version: ${{ needs.prepare.outputs.version }}
+          source-sha: ${{ needs.prepare.outputs.source-sha }}
+  publish:
+    needs: [prepare, build]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+      source-sha: ${{ needs.prepare.outputs.source-sha }}
+      publish: ${{ inputs.publish }}

@@ -3,9 +3,9 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: Managed release profile; empty preserves legacy consumer configuration
+        description: Managed release profile (application, gradle-app, web-app, contracts)
         type: string
-        default: ''
+        required: true
       dry-run:
         description: Preview the dispatched ref without preparing or publishing a release
         type: boolean
@@ -44,14 +44,13 @@ jobs:
           ref: ${{ github.sha }}
           token: ${{ steps.app-token.outputs.token }}
       - uses: $/.github/actions/setup-java
-        if: inputs.profile != 'web-app'
+        if: inputs.profile == 'contracts' || inputs.profile == 'gradle-app'
       - uses: $/.github/actions/setup-node
-        if: inputs.profile != 'gradle-app'
+        if: inputs.profile == 'contracts' || inputs.profile == 'web-app'
       - name: Repository release checks
-        if: inputs.profile != 'gradle-app'
+        if: inputs.profile == 'contracts' || inputs.profile == 'web-app'
         run: pnpm run --if-present release:verify
       - name: Managed release
-        if: inputs.profile != ''
         uses: $/.github/actions/release
         with:
           profile: ${{ inputs.profile }}
@@ -59,17 +58,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NODE_AUTH_TOKEN: ${{ github.token }}
-      - name: Release or preview
-        if: inputs.profile == ''
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          NODE_AUTH_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ inputs.dry-run }}
-          PREVIEW_BRANCH: ${{ github.ref_name }}
-        run: |
-          args=()
-          if [[ "$DRY_RUN" == 'true' ]]; then
-            # Only previews override the branch allowlist; publication keeps repo policy.
-            args+=(--dry-run --branches "$PREVIEW_BRANCH")
-          fi
-          pnpm exec semantic-release "${args[@]}"

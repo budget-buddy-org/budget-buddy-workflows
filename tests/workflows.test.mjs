@@ -28,7 +28,7 @@ test('release and dependency write privileges cannot run automatically for PRs',
 });
 
 test('PR validation stays read-only and runtime updates are trusted-event-only', () => {
-  for (const name of ['validate', 'commitlint', 'web-ci', 'gradle-ci', 'contracts-validation']) {
+  for (const name of ['validate', 'web-ci', 'gradle-ci', 'contracts-validation']) {
     assert.deepEqual(workflow(name).permissions, { contents: 'read', packages: 'read' });
     assert.equal(workflow(name).on.pull_request_target, undefined);
   }
@@ -128,4 +128,23 @@ test('rollout automation accepts only successful same-repository main push valid
   const token = rollout.jobs.update.steps.find(step => step.id === 'app');
   assert.equal(token.with.repositories, '${{ matrix.consumer }}');
   assert.equal(token.with['permission-workflows'], 'write');
+});
+
+test('managed release has no legacy consumer-config fallback', () => {
+  const release = workflow('release');
+  assert.equal(release.on.workflow_call.inputs.profile.required, true);
+  assert.equal(release.jobs.release.steps.some(step => step.run?.includes('pnpm exec semantic-release')), false);
+});
+
+test('shared image builders only start for release or explicit manual events', () => {
+  for (const stack of ['web', 'gradle']) {
+    const pipeline = workflow(stack + '-publish');
+    const allowed = new Function('github', `return (${pipeline.jobs.prepare.if});`);
+    for (const event_name of ['push', 'pull_request', 'pull_request_target']) {
+      assert.equal(allowed({ event_name }), false);
+    }
+    for (const event_name of ['release', 'workflow_dispatch']) assert.equal(allowed({ event_name }), true);
+    assert.equal(pipeline.on.workflow_call.inputs.ref.required, true);
+    assert.equal(pipeline.jobs.publish.uses, './.github/workflows/publish-image.yml');
+  }
 });

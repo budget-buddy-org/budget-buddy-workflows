@@ -29,6 +29,12 @@ export function immutableImage(value) {
   if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(value ?? '')) throw new Error('An immutable image reference is required');
   return value;
 }
+export function versionFromRef(ref, publish) {
+  const tag = (ref ?? '').replace(/^refs\/tags\//, '');
+  if (/^v?\d+\.\d+\.\d+$/.test(tag)) return version(tag.replace(/^v/, ''));
+  if (publish) throw new Error('Production publication requires a stable release tag');
+  return '0.0.0';
+}
 export function versionFrom(content, file) {
   if (file === 'package.json') return version(JSON.parse(content).version);
   if (file === 'gradle.properties') return version(content.match(/^version=(.+)$/m)?.[1].trim());
@@ -84,7 +90,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const env = process.env;
   switch (process.argv[2]) {
     case 'metadata': {
-      const v = versionFrom(readFileSync(env.VERSION_FILE, 'utf8'), env.VERSION_FILE);
+      const v = env.VERSION_FILE
+        ? versionFrom(readFileSync(env.VERSION_FILE, 'utf8'), env.VERSION_FILE)
+        : versionFromRef(env.SOURCE_REF, env.PUBLISH_IMAGES === 'true');
       const sha = sourceSha(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
       if (!['true', 'false'].includes(env.PUBLISH_IMAGES)) throw new Error('Invalid publication mode');
       if (env.PUBLISH_IMAGES === 'true') {

@@ -50,3 +50,13 @@ test('promotion is immutable, retries are idempotent, and old releases cannot ro
   assert.deepEqual(promotionTags(repo, '1.2.3', 'v1.3.0', digest, digest), ['ghcr.io/' + repo + ':1.2.3']);
   assert.throws(() => promotionTags(repo, '1.2.3', 'v1.2.3', 'sha256:' + 'c'.repeat(64), digest));
 });
+
+test('tag-based versions reject mutable production refs and allow unversioned candidates', async () => {
+  const { versionFromRef } = await import('../scripts/images.mjs');
+  assert.equal(versionFromRef('refs/tags/v1.2.3', true), '1.2.3');
+  assert.equal(versionFromRef('v1.2.3', true), '1.2.3');
+  assert.equal(versionFromRef('feature/example', false), '0.0.0');
+  for (const ref of ['main', 'v1.2.3-beta.1', '', '--help']) {
+    assert.throws(() => versionFromRef(ref, true));
+  }
+});

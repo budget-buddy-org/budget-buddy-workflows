@@ -4,7 +4,7 @@ import semanticRelease from 'semantic-release';
 
 const require = createRequire(import.meta.url);
 export async function configuration(profile) {
-  if (!['gradle-app', 'web-app', 'contracts'].includes(profile)) {
+  if (!['application', 'gradle-app', 'web-app', 'contracts'].includes(profile)) {
     throw new Error('Unknown release profile');
   }
   const { default: config } = await import(`./${profile}.mjs`);

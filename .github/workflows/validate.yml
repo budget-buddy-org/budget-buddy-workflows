@@ -54,7 +54,7 @@ jobs:
         with:
           working-directory: release
           ignore-scripts: 'true'
-      - name: Exercise real commitlint with consumer event fixtures
+      - name: Verify managed pipeline behavior
         run: node --test tests/*.test.mjs
   containers:
     needs: [lint, regression]

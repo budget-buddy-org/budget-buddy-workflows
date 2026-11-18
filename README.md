@@ -1,14 +1,14 @@
 # Budget Buddy shared CI
 
-Caller repositories own their triggers, application commands, contracts, and release configuration. This repository owns common runtime setup, validation jobs, release execution, container policy, and image publication.
+Caller repositories own their triggers, application commands, and contracts. This repository owns common runtime setup, validation jobs, release policy and execution, container policy, and image publication.
 
 ## Components
 
 | Component | Consumers | Responsibility |
 | --- | --- | --- |
-| `setup-node` action | API tooling, contracts, web | Node/pnpm versions, frozen install, cache, GitHub Packages authentication |
+| `setup-node` action | Managed tooling, contracts, web | Node/pnpm versions, frozen install, cache, GitHub Packages authentication |
 | `setup-java`, `setup-gradle` actions | API, contracts | JDK 25 and Gradle setup/cache policy |
-| `commitlint.yml` | API, contracts, web | Identical PR-title and commit checks, push/manual/bot event behavior |
+| `pr-title.yml` | API, contracts, web | Required conventional PR titles for squash merges |
 | `gradle-ci.yml` | API | Build/unit/integration tests, Sonar analysis, JAR artifact |
 | `web-ci.yml` | Web | Lint, production build/type checks, tests |
 | `contracts-validation.yml` | Contracts | Spec lint/validation, generated TypeScript typecheck and Java compilation |
@@ -31,7 +31,7 @@ The scheduled updater checks stable upstream releases and opens a PR using the r
 Replace `COMMIT_SHA` with the published library commit, and maintain the same pin across coordinated consumers:
 
 ```yaml
-name: Commitlint
+name: PR title
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
@@ -40,12 +40,12 @@ permissions:
   packages: read
 jobs:
   commitlint:
-    uses: budget-buddy-org/ci-workflows/.github/workflows/commitlint.yml@COMMIT_SHA
+    uses: budget-buddy-org/ci-workflows/.github/workflows/pr-title.yml@COMMIT_SHA
 ```
 
-Commitlint rules and dependency lockfiles live in the consumer. All three consumers currently have equivalent rules and validate PR titles and commits. Dependabot messages are exempt. Manual runs perform setup without linting a missing commit range; new-branch pushes check history up to the pushed head. PR text is passed as data to the CLI.
+PR-title rules and dependencies live in this library. Checks run without consumer checkout or dependency installation. Squash-only merging uses the validated PR title, including `!` for breaking changes. Ordinary branch commits are free form.
 
-Release callers pass the two App secrets explicitly and depend on successful validation. Normal publication runs only for a main push. An explicitly requested manual dry run checks the candidate ref and overrides the branch allowlist only for `--dry-run`. Repository release plugins and optional `release:verify` scripts define domain-specific preparation.
+Release callers pass the two App secrets explicitly and depend on successful validation. Normal publication runs only for a main push. An explicitly requested manual dry run checks the candidate ref and overrides the branch allowlist only for `--dry-run`. Required release profiles define preparation; contracts also runs its `release:verify` script.
 
 ## Image publication
 
@@ -94,6 +94,7 @@ Nested checks include `ci / ci`, `validate / validate`, and `commitlint / commit
 
 ```sh
 pnpm --dir tests/fixtures/node install --frozen-lockfile --ignore-scripts
+pnpm --dir release install --frozen-lockfile --ignore-scripts
 node --test tests/*.test.mjs
 ```
 
@@ -118,34 +119,19 @@ These checks use only contents/package read permissions, never registry writes, 
 For branch protection, require `policy / policy` in all three repositories. Image matrix checks are path-filtered and should not be required globally on unrelated PRs. The coordinator opens reviewable PRs and never bypasses branch rules or enables workflow approval.
 
 
-## Managed release migration
+## Managed release profiles
 
-The optional `profile` input on `release.yml` moves release configuration and
-tool dependencies into this library. Supported profiles are `gradle-app`,
-`web-app`, and `contracts`. Omitting it retains the existing consumer runner
-during migration. The managed action installs `release/pnpm-lock.yaml` with
-lifecycle scripts disabled and resolves plugins from that installation.
+Every release caller selects a managed profile. New application callers use
+`application`; contracts uses `contracts`. The older `gradle-app` and
+`web-app` profiles remain until their callers migrate.
+The library owns release configuration and frozen tooling dependencies. Profiles
+use tags and GitHub release notes for applications, without source updates.
+Contracts preserves its version files and changelog and also regenerates and
+commits Swift sources for tagged SPM consumers.
 
-Profiles currently preserve release commits, version files, changelogs, and
-contracts Swift generation. Contracts retains its existing analyzer defaults;
-API and web share their explicit release rules.
-
-Rollout order:
-1. Publish and validate this library revision.
-2. Pin a consumer to that revision and select its profile.
-3. Preview the release, then verify a real release and downstream publication.
-4. Remove that consumer's release configs, presets, and release dependencies.
-5. Migrate commitlint separately after configuring required PR-title checks and
-   squash merges. Update consumer policy before removing the API Node manifest.
-
-Keep source generation and application build dependencies in the consumer.
-The current workflow still installs consumer dependencies for release preparation.
-Removing tracked version files or changelogs is a separate migration because
-image metadata, web version reporting, and contracts publishing consume them.
-
-Run `pnpm --dir release install --frozen-lockfile --ignore-scripts` before
-`node --test tests/*.test.mjs`. Local tests cover plugin resolution and profile
-invariants; GitHub release previews and actual publication remain rollout gates.
+Install `release/` and `tests/fixtures/node/` with frozen lockfiles before
+running `node --test tests/*.test.mjs`. Publication changes require real consumer
+release verification as well as local regression tests.
 
 ## PR-title-only consumers
 
@@ -158,8 +144,23 @@ build jobs must not depend on it.
 Before removing local hooks, require this check and configure squash-only merges
 with the PR title as the squash subject. Use `!` in the title for breaking
 changes so the signal survives squash merging. Ordinary branch commits are free
-form. The legacy commitlint workflow remains available during migration.
+form. Legacy consumer configuration and whole-branch commit checks have been removed.
 
 Managed Gradle releases do not install consumer Node dependencies. Consumer
 policy and automatic rollout support Gradle projects without package.json or a
 pnpm lockfile.
+
+
+## Application image pipelines
+
+Use `gradle-publish.yml` or `web-publish.yml` from a thin caller with release
+and manual triggers. Pass `ref` and `publish` explicitly. Builders retain the
+native architecture matrix, source-bound digest records, scans, signing and
+immutable promotion.
+
+These pipelines derive the production version from a stable release tag and
+verify that the checkout is the tagged commit. Untagged manual candidates use
+version `0.0.0` and unique CI image tags. Gradle receives `releaseVersion`;
+the web Docker build receives `APP_VERSION`. Consumers must support those build
+inputs before switching to these pipelines and the `application` profile.
+Legacy callers may still pass a version file to the metadata action during rollout.
