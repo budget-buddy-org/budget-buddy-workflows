@@ -81,7 +81,12 @@ jobs:
         env:
           IMAGE_REF: ${{ needs.prepare.outputs.image }}@${{ steps.build.outputs.digest }}
           PLATFORM: ${{ matrix.platform }}
-        run: sh docker/smoke-test.sh
+          IMAGE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          sh docker/smoke-test.sh
+          docker run --rm --network none --platform "$PLATFORM" --entrypoint cat "$IMAGE_REF" \
+            /usr/share/nginx/html/version.json | jq --exit-status --arg version "$IMAGE_VERSION" '.version == $version'
       - uses: $/.github/actions/image-record
         with:
           digest: ${{ steps.build.outputs.digest }}
