@@ -1,6 +1,6 @@
 # Budget Buddy shared CI
 
-Caller repositories own their triggers, application commands, contracts, and release configuration. This repository owns common runtime setup, validation jobs, release execution, container policy, and image publication.
+Caller repositories own their triggers, application commands, and contracts. This repository owns common runtime setup, validation jobs, release policy and execution, container policy, and image publication.
 
 ## Components
 
@@ -118,17 +118,20 @@ These checks use only contents/package read permissions, never registry writes, 
 For branch protection, require `policy / policy` in all three repositories. Image matrix checks are path-filtered and should not be required globally on unrelated PRs. The coordinator opens reviewable PRs and never bypasses branch rules or enables workflow approval.
 
 
-## Managed release migration
+## Managed release profiles
 
-The optional `profile` input on `release.yml` moves release configuration and
-tool dependencies into this library. Supported profiles are `gradle-app`,
-`web-app`, and `contracts`. Omitting it retains the existing consumer runner
-during migration. The managed action installs `release/pnpm-lock.yaml` with
-lifecycle scripts disabled and resolves plugins from that installation.
+The optional `profile` input on `release.yml` selects centrally managed
+configuration. `application` publishes `v<version>` tags and GitHub release
+notes without changing consumer source files. `gradle-app`, `web-app`, and
+`contracts` remain supported with their existing preparation behavior. Omitting
+the profile retains the existing consumer runner during migration. The managed
+action installs `release/pnpm-lock.yaml` with lifecycle scripts disabled and
+resolves plugins from that installation.
 
-Profiles currently preserve release commits, version files, changelogs, and
-contracts Swift generation. Contracts retains its existing analyzer defaults;
-API and web share their explicit release rules.
+Application releases remain limited to pushes to `main`. Manual
+`workflow_dispatch` previews run against the dispatched ref without publishing.
+Contracts preserves its version files and changelog and regenerates and commits
+Swift sources for tagged SPM consumers.
 
 Rollout order:
 1. Publish and validate this library revision.
@@ -139,7 +142,8 @@ Rollout order:
    squash merges. Update consumer policy before removing the API Node manifest.
 
 Keep source generation and application build dependencies in the consumer.
-The current workflow still installs consumer dependencies for release preparation.
+Legacy profiles and contracts retain their existing Java/Node setup and release
+preparation; `application` uses only the library's locked release tooling.
 Removing tracked version files or changelogs is a separate migration because
 image metadata, web version reporting, and contracts publishing consume them.
 
