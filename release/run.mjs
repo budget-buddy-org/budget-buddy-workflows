@@ -4,7 +4,7 @@ import semanticRelease from 'semantic-release';
 
 const require = createRequire(import.meta.url);
 export async function configuration(profile) {
-  if (!['gradle-app', 'web-app', 'contracts'].includes(profile)) {
+  if (!['application', 'gradle-app', 'web-app', 'contracts'].includes(profile)) {
     throw new Error('Unknown release profile');
   }
   const { default: config } = await import(`./${profile}.mjs`);
@@ -17,13 +17,20 @@ export async function configuration(profile) {
   };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const config = await configuration(process.env.RELEASE_PROFILE);
-  if (!['true', 'false'].includes(process.env.DRY_RUN)) throw new Error('Invalid dry-run flag');
-  if (process.env.DRY_RUN === 'true') {
-    if (!process.env.PREVIEW_BRANCH) throw new Error('Missing preview branch');
-    config.dryRun = true;
-    config.branches = [process.env.PREVIEW_BRANCH];
+export function configurePreview(config, dryRun, previewBranch) {
+  if (!['true', 'false'].includes(dryRun)) throw new Error('Invalid dry-run flag');
+  if (dryRun === 'true') {
+    if (!previewBranch) throw new Error('Missing preview branch');
+    return { ...config, dryRun: true, branches: [previewBranch] };
   }
+  return config;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const config = configurePreview(
+    await configuration(process.env.RELEASE_PROFILE),
+    process.env.DRY_RUN,
+    process.env.PREVIEW_BRANCH,
+  );
   await semanticRelease(config, { cwd: process.cwd() });
 }

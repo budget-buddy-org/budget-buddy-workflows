@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { configuration } from '../release/run.mjs';
+import { configuration, configurePreview } from '../release/run.mjs';
 import { isAbsolute } from 'node:path';
 
 test('managed profiles resolve plugins from the locked tooling installation', async () => {
-  for (const profile of ['gradle-app', 'web-app', 'contracts']) {
+  for (const profile of ['application', 'gradle-app', 'web-app', 'contracts']) {
     const config = await configuration(profile);
     assert.deepEqual(config.branches, ['main']);
     for (const [plugin] of config.plugins) assert.ok(isAbsolute(plugin));
@@ -30,7 +30,7 @@ test('release analysis works without consumer dependencies and preserves version
   const { join } = await import('node:path');
   const cwd = mkdtempSync(join(tmpdir(), 'managed-release-'));
   try {
-    for (const profile of ['gradle-app', 'web-app', 'contracts']) {
+    for (const profile of ['application', 'gradle-app', 'web-app', 'contracts']) {
       const config = await configuration(profile);
       const [module, options] = config.plugins.find(([path]) => path.includes('commit-analyzer'));
       const { analyzeCommits } = await import(module);
@@ -52,8 +52,31 @@ test('release analysis works without consumer dependencies and preserves version
   }
 });
 
-test('each managed profile renders real release notes with its installed writer and preset', async () => {
-  for (const profile of ['gradle-app', 'web-app', 'contracts']) {
+test('application releases create version tags and notes without source updates', async () => {
+  const config = await configuration('application');
+  assert.equal(config.tagFormat, 'v${version}');
+  assert.equal(config.plugins.length, 3);
+  assert.ok(config.plugins.some(([plugin]) => plugin.includes('release-notes-generator')));
+  assert.ok(config.plugins.some(([plugin]) => plugin.includes('semantic-release/github')));
+  assert.ok(config.plugins.every(([plugin]) =>
+    !/changelog|semantic-release\/git\/|semantic-release\/npm\/|semantic-release\/exec\//.test(plugin)));
+});
+
+test('application preview runs on the dispatched ref without changing normal release config', async () => {
+  const config = await configuration('application');
+  assert.deepEqual(config.branches, ['main']);
+  const preview = configurePreview(config, 'true', 'release-preview');
+  assert.equal(preview.dryRun, true);
+  assert.deepEqual(preview.branches, ['release-preview']);
+  assert.deepEqual(config.branches, ['main']);
+  assert.equal(config.dryRun, undefined);
+  assert.deepEqual(configurePreview(config, 'false').branches, ['main']);
+  assert.throws(() => configurePreview(config, 'true'), /Missing preview branch/);
+  assert.throws(() => configurePreview(config, 'maybe', 'release-preview'), /Invalid dry-run flag/);
+});
+
+test('managed release notes render with each profile and the locked preset', async () => {
+  for (const profile of ['application', 'gradle-app', 'web-app', 'contracts']) {
     const config = await configuration(profile);
     const [module, options] = config.plugins.find(([path]) => path.includes('release-notes-generator'));
     const { generateNotes } = await import(module);

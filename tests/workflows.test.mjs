@@ -27,6 +27,28 @@ test('release and dependency write privileges cannot run automatically for PRs',
   assert.equal(submit({ event_name: 'push', ref: 'refs/heads/main' }), true);
 });
 
+test('application profile uses shared tooling while preserving legacy setup and previews', () => {
+  const release = workflow('release');
+  assert.equal(release.on.workflow_call.inputs.profile.default, '');
+  const steps = release.jobs.release.steps;
+  assert.equal(steps.find(step => step.uses === '$/.github/actions/setup-java').if,
+    "inputs.profile == '' || inputs.profile == 'contracts' || inputs.profile == 'gradle-app'");
+  assert.equal(steps.find(step => step.uses === '$/.github/actions/setup-node').if,
+    "inputs.profile == '' || inputs.profile == 'contracts' || inputs.profile == 'web-app'");
+  assert.equal(steps.find(step => step.name === 'Repository release checks').if,
+    "inputs.profile == '' || inputs.profile == 'contracts' || inputs.profile == 'web-app'");
+  assert.equal(steps.find(step => step.name === 'Managed release').with.profile, '${{ inputs.profile }}');
+  assert.equal(steps.find(step => step.name === 'Managed release').with['dry-run'], '${{ inputs.dry-run }}');
+  assert.equal(steps.find(step => step.name === 'Release or preview').if, "inputs.profile == ''");
+
+  const action = load(readFileSync('.github/actions/release/action.yml', 'utf8'));
+  assert.match(action.inputs.profile.description, /application/);
+  const run = action.runs.steps.find(step => step.name === 'Run managed release');
+  assert.equal(run.env.RELEASE_PROFILE, '${{ inputs.profile }}');
+  assert.equal(run.env.DRY_RUN, '${{ inputs.dry-run }}');
+  assert.equal(run.env.PREVIEW_BRANCH, '${{ github.ref_name }}');
+});
+
 test('PR validation stays read-only and runtime updates are trusted-event-only', () => {
   for (const name of ['validate', 'commitlint', 'web-ci', 'gradle-ci', 'contracts-validation']) {
     assert.deepEqual(workflow(name).permissions, { contents: 'read', packages: 'read' });

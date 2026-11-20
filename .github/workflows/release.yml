@@ -3,7 +3,7 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: Managed release profile; empty preserves legacy consumer configuration
+        description: Managed release profile (application, gradle-app, web-app, contracts); empty preserves legacy consumer configuration
         type: string
         default: ''
       dry-run:
@@ -44,11 +44,11 @@ jobs:
           ref: ${{ github.sha }}
           token: ${{ steps.app-token.outputs.token }}
       - uses: $/.github/actions/setup-java
-        if: inputs.profile != 'web-app'
+        if: inputs.profile == '' || inputs.profile == 'contracts' || inputs.profile == 'gradle-app'
       - uses: $/.github/actions/setup-node
-        if: inputs.profile != 'gradle-app'
+        if: inputs.profile == '' || inputs.profile == 'contracts' || inputs.profile == 'web-app'
       - name: Repository release checks
-        if: inputs.profile != 'gradle-app'
+        if: inputs.profile == '' || inputs.profile == 'contracts' || inputs.profile == 'web-app'
         run: pnpm run --if-present release:verify
       - name: Managed release
         if: inputs.profile != ''

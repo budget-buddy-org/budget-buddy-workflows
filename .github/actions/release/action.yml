@@ -2,7 +2,7 @@ name: Managed release
 description: Run centrally locked release tooling against the consumer checkout
 inputs:
   profile:
-    description: Release profile (gradle-app, web-app, contracts)
+    description: Release profile (application, gradle-app, web-app, contracts)
     required: true
   dry-run:
     description: Preview without preparing or publishing
