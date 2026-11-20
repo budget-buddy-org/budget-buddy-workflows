@@ -50,6 +50,7 @@ test('application profile uses shared tooling while preserving legacy setup and 
 });
 
 test('PR validation stays read-only and runtime updates are trusted-event-only', () => {
+  assert.deepEqual(workflow('validate').on.pull_request.types, ['opened', 'synchronize', 'reopened', 'edited']);
   for (const name of ['validate', 'commitlint', 'web-ci', 'gradle-ci', 'contracts-validation']) {
     assert.deepEqual(workflow(name).permissions, { contents: 'read', packages: 'read' });
     assert.equal(workflow(name).on.pull_request_target, undefined);
