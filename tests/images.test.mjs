@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRecords, blockingFindings, validateIndex, versionFrom, immutableImage, promotionTags } from '../scripts/images.mjs';
+import { validateRecords, blockingFindings, validateIndex, versionFrom, metadataVersion, immutableImage, promotionTags } from '../scripts/images.mjs';
 import { signingIdentity } from '../scripts/signing-identity.mjs';
 
 const repo = 'budget-buddy-org/budget-buddy-web-app';
@@ -18,6 +18,30 @@ test('digest handoff rejects mixed commits, versions, repositories, and duplicat
   assert.throws(() => versionFrom('{"version":"1.2.3; echo unsafe"}', 'package.json'));
   assert.equal(immutableImage(record.image + '@' + digest), record.image + '@' + digest);
   assert.throws(() => immutableImage(record.image + ':latest'));
+});
+test('production metadata uses the release tag and candidates retain file-based versions', () => {
+  assert.equal(metadataVersion({
+    sourceRef: 'refs/tags/v2.3.4',
+    versionFile: 'package.json',
+    publish: true,
+  }), '2.3.4');
+  assert.equal(metadataVersion({
+    sourceRef: 'main',
+    versionFile: 'package.json',
+    versionContents: '{"version":"4.19.2"}',
+    publish: false,
+  }), '4.19.2');
+  assert.equal(metadataVersion({
+    sourceRef: 'v1.16.0',
+    versionFile: 'gradle.properties',
+    versionContents: 'version=1.15.0\n',
+    publish: true,
+  }), '1.16.0');
+  assert.throws(() => metadataVersion({
+    sourceRef: 'main',
+    versionFile: 'gradle.properties',
+    publish: true,
+  }), /matching release tag/);
 });
 test('one vulnerability gate applies to both apps and both architectures', () => {
   const report = severity => ({ SchemaVersion: 2, Results: [{ Vulnerabilities: [{ VulnerabilityID: 'CVE-fixture', Severity: severity, FixedVersion: '2.0' }] }] });
