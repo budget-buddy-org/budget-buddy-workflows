@@ -2,9 +2,9 @@ import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const library = 'budget-buddy-org/ci-workflows';
+export const library = 'budget-buddy-org/budget-buddy-workflows';
 export const consumers = ['budget-buddy-contracts', 'budget-buddy-api', 'budget-buddy-web-app'];
-const reference = /budget-buddy-org\/ci-workflows\/[^\s@"']+@([^\s"'#]+)/g;
+const reference = /budget-buddy-org\/budget-buddy-workflows\/[^\s@"']+@([^\s"'#]+)/g;
 export function workflowFiles(root) {
   return readdirSync(join(root, '.github/workflows')).filter(n => /\.ya?ml$/.test(n)).map(n => join(root, '.github/workflows', n));
 }

@@ -64,11 +64,14 @@ test('index validation requires both real Linux platforms and binds source/versi
   assert.throws(() => validateRecords([{ ...record, sourceRef: 'refs/heads/other' }], repo, '1.2.3', sha, 'linux/amd64', 'refs/heads/main'));
 });
 test('signature verification binds the reusable signer identity and the caller repository', () => {
-  const claims = { iss: 'https://token.actions.githubusercontent.com', aud: 'sigstore', repository: repo, job_workflow_ref: 'budget-buddy-org/ci-workflows/.github/workflows/publish-image.yml@' + sha };
+  const claims = { iss: 'https://token.actions.githubusercontent.com', aud: 'sigstore', repository: repo, job_workflow_ref: 'budget-buddy-org/budget-buddy-workflows/.github/workflows/publish-image.yml@' + sha };
   assert.equal(signingIdentity(claims, repo), 'https://github.com/' + claims.job_workflow_ref);
+  const legacyClaims = { ...claims, job_workflow_ref: 'budget-buddy-org/ci-workflows/.github/workflows/publish-image.yml@' + sha };
+  assert.equal(signingIdentity(legacyClaims, repo), 'https://github.com/' + legacyClaims.job_workflow_ref);
   assert.throws(() => signingIdentity(claims, 'other/repository'));
-  assert.throws(() => signingIdentity({ ...claims, job_workflow_ref: 'other/repo/.github/workflows/publish-image.yml@main' }, repo));
+  assert.throws(() => signingIdentity({ ...claims, job_workflow_ref: 'budget-buddy-org/other-workflows/.github/workflows/publish-image.yml@' + sha }, repo));
   assert.throws(() => signingIdentity({ ...claims, iss: 'https://untrusted.example' }, repo));
+  assert.throws(() => signingIdentity({ ...claims, aud: 'other-audience' }, repo));
 });
 test('promotion is immutable, retries are idempotent, and old releases cannot roll aliases back', () => {
   assert.deepEqual(promotionTags(repo, '1.2.3', 'v1.2.3', '', digest), ['ghcr.io/' + repo + ':1.2.3', 'ghcr.io/' + repo + ':1.2', 'ghcr.io/' + repo + ':latest']);

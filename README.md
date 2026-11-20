@@ -40,7 +40,7 @@ permissions:
   packages: read
 jobs:
   commitlint:
-    uses: budget-buddy-org/ci-workflows/.github/workflows/commitlint.yml@COMMIT_SHA
+    uses: budget-buddy-org/budget-buddy-workflows/.github/workflows/commitlint.yml@COMMIT_SHA
 ```
 
 Commitlint rules and dependency lockfiles live in the consumer. All three consumers currently have equivalent rules and validate PR titles and commits. Dependabot messages are exempt. Manual runs perform setup without linting a missing commit range; new-branch pushes check history up to the pushed head. PR text is passed as data to the CLI.
@@ -75,7 +75,7 @@ Retry a failed publication job with its original digest artifacts. This preserve
 Fulcio uses the reusable publisher's `job_workflow_ref` as the [certificate identity](https://docs.sigstore.dev/certificate_authority/oidc-in-fulcio/). Images now use this signer URI:
 
 ```
-https://github.com/budget-buddy-org/ci-workflows/.github/workflows/publish-image.yml@SHARED_COMMIT_SHA
+https://github.com/budget-buddy-org/budget-buddy-workflows/.github/workflows/publish-image.yml@SHARED_COMMIT_SHA
 ```
 
 Verification checks the exact signer identity, `https://token.actions.githubusercontent.com` issuer, and the caller repository. Deployment policies should bind the caller and intended release context as well as the shared signer. The deployment repository currently has no signing-identity allowlist to migrate.
