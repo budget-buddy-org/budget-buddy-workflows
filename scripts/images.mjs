@@ -13,6 +13,21 @@ export function sourceSha(value) {
   if (!/^[a-f0-9]{40}$/.test(value ?? '')) throw new Error('Invalid source SHA');
   return value;
 }
+export function sourceRef(value) {
+  if (!/^refs\/(?:heads|tags)\/[^\r\n]+$/.test(value ?? '')) throw new Error('Invalid source ref');
+  return value;
+}
+export function validateLatestSource({ eventName, ref, defaultBranch, sourceSha: sha, eventSha, currentSha }) {
+  if (eventName !== 'push' || !defaultBranch || sourceRef(ref) !== `refs/heads/${defaultBranch}`) {
+    throw new Error('Latest publication requires a push to the repository default branch');
+  }
+  if (sourceSha(sha) !== sourceSha(eventSha)) {
+    throw new Error('Latest publication must use the exact pushed source commit');
+  }
+  if (currentSha && sourceSha(currentSha) !== sourceSha(sha)) {
+    throw new Error('A newer default-branch commit superseded this publication');
+  }
+}
 export function digest(value) {
   if (!/^sha256:[a-f0-9]{64}$/.test(value ?? '')) throw new Error('Invalid image digest');
   return value;
@@ -43,13 +58,14 @@ export function versionFromTag(sourceRef) {
 export function metadataVersion({ sourceRef, versionFile, versionContents, publish }) {
   return publish ? versionFromTag(sourceRef) : versionFrom(versionContents, versionFile);
 }
-export function validateRecords(records, repository, expectedVersion, sha, expectedPlatform) {
+export function validateRecords(records, repository, expectedVersion, sha, expectedPlatform, expectedSourceRef) {
   const expected = expectedPlatform ? [platform(expectedPlatform)] : platforms;
   if (records.length !== expected.length) throw new Error('Unexpected image record count');
   const seen = new Set();
   for (const record of records) {
-    if (record.image !== image(repository) || record.version !== version(expectedVersion) || record.sourceSha !== sourceSha(sha)) {
-      throw new Error('Image records must match the repository, version, and source commit');
+    if (record.image !== image(repository) || record.version !== version(expectedVersion) || record.sourceSha !== sourceSha(sha)
+      || sourceRef(record.sourceRef) !== (expectedSourceRef ? sourceRef(expectedSourceRef) : record.sourceRef)) {
+      throw new Error('Image records must match the repository, version, source ref, and source commit');
     }
     platform(record.platform);
     if (!expected.includes(record.platform) || seen.has(record.platform)) throw new Error('Duplicate or unexpected platform record');
@@ -67,12 +83,14 @@ export function blockingFindings(report, target) {
     ...(result.Secrets ?? []).filter(item => severities.includes(item.Severity)),
   ]);
 }
-export function validateIndex(index, sha, releaseVersion) {
+export function validateIndex(index, sha, releaseVersion, expectedSourceRef) {
   const linux = (index.manifests ?? []).filter(item => item.platform?.os === 'linux');
   const arches = new Set(linux.map(item => item.platform.architecture));
   if (arches.size !== 2 || !arches.has('amd64') || !arches.has('arm64')) throw new Error('Manifest must contain both supported Linux architectures');
-  if (index.annotations?.['org.opencontainers.image.revision'] !== sha || index.annotations?.['org.opencontainers.image.version'] !== releaseVersion) {
-    throw new Error('Manifest source/version annotations do not match the build');
+  if (index.annotations?.['org.opencontainers.image.revision'] !== sha
+    || index.annotations?.['org.opencontainers.image.version'] !== releaseVersion
+    || index.annotations?.['com.github.actions.source-ref'] !== sourceRef(expectedSourceRef)) {
+    throw new Error('Manifest source ref/version annotations do not match the build');
   }
 }
 export function promotionTags(repository, releaseVersion, latestRelease, existingDigest, signedDigest) {
@@ -94,7 +112,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   switch (process.argv[2]) {
     case 'metadata': {
       if (!['true', 'false'].includes(env.PUBLISH_IMAGES)) throw new Error('Invalid publication mode');
+      if (!['true', 'false'].includes(env.PROMOTE_LATEST)) throw new Error('Invalid latest promotion mode');
       const publish = env.PUBLISH_IMAGES === 'true';
+      const promoteLatest = env.PROMOTE_LATEST === 'true';
+      if (publish && promoteLatest) throw new Error('Release publication and latest-only promotion are mutually exclusive');
       const v = metadataVersion({
         sourceRef: env.SOURCE_REF,
         versionFile: env.VERSION_FILE,
@@ -102,17 +123,38 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         publish,
       });
       const sha = sourceSha(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
+      if (promoteLatest) {
+        validateLatestSource({
+          eventName: env.EVENT_NAME,
+          ref: env.EVENT_REF,
+          defaultBranch: env.DEFAULT_BRANCH,
+          sourceSha: sha,
+          eventSha: env.EVENT_SHA,
+        });
+      }
       if (publish) {
         const tag = (env.SOURCE_REF ?? '').replace(/^refs\/tags\//, '');
         execFileSync('git', ['fetch', '--no-tags', 'origin', `refs/tags/${tag}:refs/tags/${tag}`], { stdio: 'inherit' });
         const tagged = execFileSync('git', ['rev-parse', `refs/tags/${tag}^{commit}`], { encoding: 'utf8' }).trim();
         if (tagged !== sha) throw new Error('Checkout does not match the release tag');
       }
-      emit({ image: image(env.GITHUB_REPOSITORY), version: v, 'source-sha': sha });
+      emit({ image: image(env.GITHUB_REPOSITORY), version: v, 'source-sha': sha, 'source-ref': sourceRef(env.EVENT_REF) });
       break;
     }
+    case 'latest-promotion':
+      if (env.PUBLISH_IMAGES !== 'false') throw new Error('Latest-only promotion cannot use release publication mode');
+      if (!env.CURRENT_BRANCH_SHA) throw new Error('Unable to verify the current default-branch commit');
+      validateLatestSource({
+        eventName: env.EVENT_NAME,
+        ref: env.EVENT_REF,
+        defaultBranch: env.DEFAULT_BRANCH,
+        sourceSha: env.SOURCE_SHA,
+        eventSha: env.EVENT_SHA,
+        currentSha: env.CURRENT_BRANCH_SHA,
+      });
+      break;
     case 'record': {
-      const record = { image: image(env.GITHUB_REPOSITORY), version: version(env.IMAGE_VERSION), sourceSha: sourceSha(env.SOURCE_SHA), platform: platform(env.IMAGE_PLATFORM), digest: digest(env.IMAGE_DIGEST) };
+      const record = { image: image(env.GITHUB_REPOSITORY), version: version(env.IMAGE_VERSION), sourceSha: sourceSha(env.SOURCE_SHA), sourceRef: sourceRef(env.SOURCE_REF), platform: platform(env.IMAGE_PLATFORM), digest: digest(env.IMAGE_DIGEST) };
       const directory = join(env.RUNNER_TEMP, 'image-records');
       mkdirSync(directory, { recursive: true });
       const file = join(directory, record.platform.replace('/', '-') + '.json');
@@ -122,7 +164,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     case 'records': {
       const records = readdirSync(env.RECORDS_DIR).filter(name => name.endsWith('.json')).map(name => JSON.parse(readFileSync(join(env.RECORDS_DIR, name), 'utf8')));
-      validateRecords(records, env.GITHUB_REPOSITORY, env.IMAGE_VERSION, env.SOURCE_SHA, env.IMAGE_PLATFORM || undefined);
+      validateRecords(records, env.GITHUB_REPOSITORY, env.IMAGE_VERSION, env.SOURCE_SHA, env.IMAGE_PLATFORM || undefined, env.SOURCE_REF);
       const outputs = { image: image(env.GITHUB_REPOSITORY) };
       for (const record of records) outputs['digest-' + record.platform.split('/')[1]] = record.digest;
       if (records.length === 1) outputs.digest = records[0].digest;
@@ -148,7 +190,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       break;
     }
     case 'index':
-      validateIndex(JSON.parse(readFileSync(process.argv[3], 'utf8')), sourceSha(env.SOURCE_SHA), version(env.IMAGE_VERSION));
+      validateIndex(JSON.parse(readFileSync(process.argv[3], 'utf8')), sourceSha(env.SOURCE_SHA), version(env.IMAGE_VERSION), env.SOURCE_REF);
       break;
     case 'promotion': {
       const tags = promotionTags(env.GITHUB_REPOSITORY, env.IMAGE_VERSION, env.LATEST_RELEASE, env.EXISTING_DIGEST, env.SIGNED_DIGEST);

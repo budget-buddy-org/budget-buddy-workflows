@@ -57,14 +57,16 @@ flowchart LR
   B --> C[Validate digest records and scan both platforms]
   C --> D[Assemble annotated candidate index]
   D --> E[Sign and verify final digest]
-  E --> F[Promote release tags]
+  E --> F[Promote release or verified latest tags]
 ```
 
-Platform records bind the repository, version, source SHA, architecture, and registry digest. Missing, duplicated, or mixed records fail publication. Records are retained for three days and replaced on build reruns.
+Platform records bind the repository, version, source ref, source SHA, architecture, and registry digest. Missing, duplicated, or mixed records fail publication. The assembled index carries and validates the exact source ref and SHA. Records are retained for three days and replaced on build reruns.
 
 One [vulnerability policy](container-policy.json) applies to both apps on both architectures: fixed CRITICAL findings and CRITICAL secrets block publication; HIGH findings are reported. Unfixed CVEs are excluded. Callers cannot override this policy. Scan infrastructure failures fail the job. Available SARIF is uploaded before applying the vulnerability gate, including when a scan fails.
 
 Manual image runs default to candidate mode and only create `ci-<run>-<attempt>` tags; candidate versions come from each caller's version file. Production versions come from the matching stable source release tag, independently of the caller's version file. Candidate validation pulls both architectures and verifies tag-copy digest preservation. The signed index is promoted to its exact version, with architecture aliases retained. Only the current GitHub latest release updates `latest` and the minor-series alias. An existing version tag with different content is rejected.
+
+Trusted callers may opt into latest-only publication on a default-branch push. Both the metadata action and publisher require a push to the event repository's default branch and the exact event commit SHA; pull requests, tag pushes, other branches, release mode, and manual latest requests are rejected. Before promotion, the publisher also confirms the pushed SHA is still the branch tip, preventing delayed runs from rolling `latest` backward. The caller supplies its real version-file value (no synthetic release version), and the shared publisher promotes only the digest that passed both platform scans, index validation, signing, and signature verification. Existing release-tag validation and manual candidate behavior are unchanged.
 
 Retry a failed publication job with its original digest artifacts. This preserves image content and supports idempotent tag promotion. Rebuilding an already published version with different content requires a new release version.
 

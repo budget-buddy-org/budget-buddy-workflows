@@ -36,5 +36,6 @@ runs:
         RECORDS_DIR: ${{ inputs.directory }}
         IMAGE_VERSION: ${{ inputs.version }}
         SOURCE_SHA: ${{ inputs.source-sha }}
+        SOURCE_REF: ${{ github.ref }}
         IMAGE_PLATFORM: ${{ inputs.platform }}
       run: node "$IMAGE_HELPER" records
