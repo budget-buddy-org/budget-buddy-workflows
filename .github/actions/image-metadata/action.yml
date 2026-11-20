@@ -10,6 +10,9 @@ inputs:
   publish:
     description: Whether this is production publication
     default: 'false'
+  promote-latest:
+    description: Require metadata to match this trusted default-branch push
+    default: 'false'
 outputs:
   image:
     description: Caller GHCR image
@@ -20,6 +23,9 @@ outputs:
   source-sha:
     description: Immutable source commit
     value: ${{ steps.metadata.outputs.source-sha }}
+  source-ref:
+    description: Source ref associated with the immutable commit
+    value: ${{ steps.metadata.outputs.source-ref }}
   node-version:
     description: Shared Node version for Docker builds
     value: ${{ steps.versions.outputs.node }}
@@ -38,4 +44,9 @@ runs:
         VERSION_FILE: ${{ inputs.version-file }}
         SOURCE_REF: ${{ inputs.ref }}
         PUBLISH_IMAGES: ${{ inputs.publish }}
+        PROMOTE_LATEST: ${{ inputs.promote-latest }}
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_REF: ${{ github.ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        EVENT_SHA: ${{ github.sha }}
       run: node "$IMAGE_HELPER" metadata

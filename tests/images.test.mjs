@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRecords, blockingFindings, validateIndex, versionFrom, metadataVersion, immutableImage, promotionTags } from '../scripts/images.mjs';
+import { validateRecords, blockingFindings, validateIndex, versionFrom, metadataVersion, immutableImage, promotionTags, validateLatestSource } from '../scripts/images.mjs';
 import { signingIdentity } from '../scripts/signing-identity.mjs';
 
 const repo = 'budget-buddy-org/budget-buddy-web-app';
 const sha = 'a'.repeat(40), digest = 'sha256:' + 'b'.repeat(64);
-const record = { image: 'ghcr.io/' + repo, version: '1.2.3', sourceSha: sha, platform: 'linux/amd64', digest };
+const record = { image: 'ghcr.io/' + repo, version: '1.2.3', sourceSha: sha, sourceRef: 'refs/heads/main', platform: 'linux/amd64', digest };
 test('digest handoff rejects mixed commits, versions, repositories, and duplicate platforms', () => {
   const records = [record, { ...record, platform: 'linux/arm64' }];
   assert.equal(validateRecords(records, repo, '1.2.3', sha).length, 2);
@@ -56,10 +56,12 @@ test('one vulnerability gate applies to both apps and both architectures', () =>
   assert.throws(() => blockingFindings(report('HIGH'), 'windows/amd64'));
 });
 test('index validation requires both real Linux platforms and binds source/version', () => {
-  const index = { manifests: ['amd64', 'arm64'].map(architecture => ({ platform: { os: 'linux', architecture } })), annotations: { 'org.opencontainers.image.revision': sha, 'org.opencontainers.image.version': '1.2.3' } };
-  validateIndex(index, sha, '1.2.3');
-  assert.throws(() => validateIndex({ ...index, manifests: index.manifests.slice(1) }, sha, '1.2.3'));
-  assert.throws(() => validateIndex(index, 'c'.repeat(40), '1.2.3'));
+  const index = { manifests: ['amd64', 'arm64'].map(architecture => ({ platform: { os: 'linux', architecture } })), annotations: { 'org.opencontainers.image.revision': sha, 'org.opencontainers.image.version': '1.2.3', 'com.github.actions.source-ref': 'refs/heads/main' } };
+  validateIndex(index, sha, '1.2.3', 'refs/heads/main');
+  assert.throws(() => validateIndex({ ...index, manifests: index.manifests.slice(1) }, sha, '1.2.3', 'refs/heads/main'));
+  assert.throws(() => validateIndex(index, 'c'.repeat(40), '1.2.3', 'refs/heads/main'));
+  assert.throws(() => validateIndex(index, sha, '1.2.3', 'refs/heads/other'));
+  assert.throws(() => validateRecords([{ ...record, sourceRef: 'refs/heads/other' }], repo, '1.2.3', sha, 'linux/amd64', 'refs/heads/main'));
 });
 test('signature verification binds the reusable signer identity and the caller repository', () => {
   const claims = { iss: 'https://token.actions.githubusercontent.com', aud: 'sigstore', repository: repo, job_workflow_ref: 'budget-buddy-org/ci-workflows/.github/workflows/publish-image.yml@' + sha };
@@ -73,4 +75,27 @@ test('promotion is immutable, retries are idempotent, and old releases cannot ro
   assert.equal(promotionTags(repo, '1.2.3', 'v1.2.3', digest, digest).length, 3);
   assert.deepEqual(promotionTags(repo, '1.2.3', 'v1.3.0', digest, digest), ['ghcr.io/' + repo + ':1.2.3']);
   assert.throws(() => promotionTags(repo, '1.2.3', 'v1.2.3', 'sha256:' + 'c'.repeat(64), digest));
+});
+test('latest metadata is restricted to the exact default-branch push commit', () => {
+  const context = {
+    eventName: 'push',
+    ref: 'refs/heads/main',
+    defaultBranch: 'main',
+    sourceSha: sha,
+    eventSha: sha,
+    currentSha: sha,
+    currentSha: sha,
+  };
+  assert.equal(validateLatestSource(context), undefined);
+  for (const change of [
+    { eventName: 'pull_request' },
+    { eventName: 'push', ref: 'refs/heads/feature' },
+    { eventName: 'push', ref: 'refs/tags/v1.2.3' },
+    { eventName: 'push', defaultBranch: 'trunk' },
+    { eventName: 'push', eventSha: 'c'.repeat(40) },
+    { eventName: 'push', currentSha: 'c'.repeat(40) },
+    { eventName: 'push', currentSha: 'c'.repeat(40) },
+  ]) {
+    assert.throws(() => validateLatestSource({ ...context, ...change }));
+  }
 });

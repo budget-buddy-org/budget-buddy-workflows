@@ -11,6 +11,9 @@ on:
       publish:
         type: boolean
         default: false
+      promote-latest:
+        type: boolean
+        default: false
     outputs:
       digest:
         description: Signed multi-platform manifest digest
@@ -18,11 +21,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: image-publication-${{ github.repository }}-${{ inputs.version }}-${{ inputs.publish }}
+  group: image-publication-${{ github.repository }}-${{ inputs['promote-latest'] && 'latest' || inputs.version }}-${{ inputs.publish }}
   cancel-in-progress: false
 jobs:
   scan:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'published')
+    if: (github.event_name == 'workflow_dispatch' && inputs['promote-latest'] != true) || (github.event_name == 'release' && github.event.action == 'published' && inputs['promote-latest'] != true) || (github.event_name == 'push' && inputs['promote-latest'] == true && inputs.publish == false && github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch && inputs['source-sha'] == github.sha)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -59,7 +62,7 @@ jobs:
           platform: ${{ matrix.platform }}
   publish:
     needs: scan
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'published')
+    if: (github.event_name == 'workflow_dispatch' && inputs['promote-latest'] != true) || (github.event_name == 'release' && github.event.action == 'published' && inputs['promote-latest'] != true) || (github.event_name == 'push' && inputs['promote-latest'] == true && inputs.publish == false && github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch && inputs['source-sha'] == github.sha)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -82,3 +85,4 @@ jobs:
           version: ${{ inputs.version }}
           source-sha: ${{ inputs.source-sha }}
           publish: ${{ inputs.publish }}
+          promote-latest: ${{ inputs.promote-latest }}

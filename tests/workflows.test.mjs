@@ -50,6 +50,7 @@ test('application profile uses shared tooling while preserving legacy setup and 
 });
 
 test('PR validation stays read-only and runtime updates are trusted-event-only', () => {
+  assert.deepEqual(workflow('validate').on.pull_request.types, ['opened', 'synchronize', 'reopened', 'edited']);
   for (const name of ['validate', 'commitlint', 'web-ci', 'gradle-ci', 'contracts-validation']) {
     assert.deepEqual(workflow(name).permissions, { contents: 'read', packages: 'read' });
     assert.equal(workflow(name).on.pull_request_target, undefined);
@@ -90,16 +91,31 @@ test('all third-party action dependencies are immutable commits', () => {
   assert.match(upload.uses, /^github\/codeql-action\/upload-sarif@[a-f0-9]{40}$/);
 });
 
-test('container signing and publication are unavailable to PR or push events', () => {
+test('container publication allows latest only for the exact default-branch push', () => {
   const publish = workflow('publish-image');
   for (const job of Object.values(publish.jobs)) {
-    const allowed = new Function('github', `return (${job.if});`);
-    for (const event of ['pull_request', 'pull_request_target', 'push', 'issue_comment']) {
-      assert.equal(allowed({ event_name: event, ref: 'refs/heads/main', event: { action: 'published' } }), false);
+    const allowed = new Function('github', 'inputs', `return (${job.if});`);
+    const defaultPush = {
+      event_name: 'push',
+      ref: 'refs/heads/main',
+      ref_type: 'branch',
+      ref_name: 'main',
+      sha: 'a'.repeat(40),
+      event: { repository: { default_branch: 'main' } },
+    };
+    for (const event of ['pull_request', 'pull_request_target', 'issue_comment']) {
+      assert.equal(allowed({ ...defaultPush, event_name: event }, { 'promote-latest': true, publish: false, 'source-sha': defaultPush.sha }), false);
     }
-    assert.equal(allowed({ event_name: 'release', event: { action: 'published' } }), true);
-    assert.equal(allowed({ event_name: 'release', event: { action: 'created' } }), false);
-    assert.equal(allowed({ event_name: 'workflow_dispatch' }), true);
+    assert.equal(allowed(defaultPush, { 'promote-latest': true, publish: false, 'source-sha': defaultPush.sha }), true);
+    assert.equal(allowed(defaultPush, { 'promote-latest': true, publish: false, 'source-sha': 'b'.repeat(40) }), false);
+    assert.equal(allowed({ ...defaultPush, ref: 'refs/heads/feature', ref_name: 'feature' }, { 'promote-latest': true, publish: false, 'source-sha': defaultPush.sha }), false);
+    assert.equal(allowed({ ...defaultPush, event: { repository: { default_branch: 'trunk' } } }, { 'promote-latest': true, publish: false, 'source-sha': defaultPush.sha }), false);
+    assert.equal(allowed(defaultPush, { 'promote-latest': true, publish: true, 'source-sha': defaultPush.sha }), false);
+    assert.equal(allowed({ event_name: 'release', event: { action: 'published' } }, { 'promote-latest': false }), true);
+    assert.equal(allowed({ event_name: 'release', event: { action: 'created' } }, { 'promote-latest': false }), false);
+    assert.equal(allowed({ event_name: 'release', event: { action: 'published' } }, { 'promote-latest': true }), false);
+    assert.equal(allowed({ event_name: 'workflow_dispatch' }, { 'promote-latest': false }), true);
+    assert.equal(allowed({ event_name: 'workflow_dispatch' }, { 'promote-latest': true }), false);
   }
   assert.deepEqual(publish.jobs.publish.permissions, { contents: 'read', packages: 'write', 'id-token': 'write' });
   const action = load(readFileSync('.github/actions/publish-image/action.yml', 'utf8'));
@@ -108,6 +124,11 @@ test('container signing and publication are unavailable to PR or push events', (
   const promote = steps.findIndex(step => step.name?.startsWith('Promote production'));
   assert.ok(sign >= 0 && sign < promote, 'promotion must follow successful signature verification');
   assert.equal(steps[promote].if, "inputs.publish == 'true'");
+  const latest = steps.find(step => step.name?.startsWith('Promote latest'));
+  assert.equal(latest.if, "inputs.promote-latest == 'true'");
+  assert.ok(steps.indexOf(latest) > sign, 'latest promotion must follow successful signature verification');
+  assert.ok(latest.run.indexOf('gh api') < latest.run.indexOf('docker buildx imagetools create'));
+  assert.equal(latest.env.GH_TOKEN, '${{ github.token }}');
   assert.deepEqual(Object.keys(workflow('container-smoke').on).sort(), ['workflow_call', 'workflow_dispatch']);
   for (const job of Object.values(workflow('container-smoke').jobs)) {
     assert.equal(job.if, "github.event_name == 'workflow_dispatch'");
