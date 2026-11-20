@@ -34,6 +34,15 @@ export function versionFrom(content, file) {
   if (file === 'gradle.properties') return version(content.match(/^version=(.+)$/m)?.[1].trim());
   throw new Error('Unsupported version file');
 }
+export function versionFromTag(sourceRef) {
+  const tag = (sourceRef ?? '').replace(/^refs\/tags\//, '');
+  const match = /^(?:v)?(\d+\.\d+\.\d+)$/.exec(tag);
+  if (!match) throw new Error('Production publication requires the matching release tag');
+  return version(match[1]);
+}
+export function metadataVersion({ sourceRef, versionFile, versionContents, publish }) {
+  return publish ? versionFromTag(sourceRef) : versionFrom(versionContents, versionFile);
+}
 export function validateRecords(records, repository, expectedVersion, sha, expectedPlatform) {
   const expected = expectedPlatform ? [platform(expectedPlatform)] : platforms;
   if (records.length !== expected.length) throw new Error('Unexpected image record count');
@@ -84,12 +93,17 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const env = process.env;
   switch (process.argv[2]) {
     case 'metadata': {
-      const v = versionFrom(readFileSync(env.VERSION_FILE, 'utf8'), env.VERSION_FILE);
-      const sha = sourceSha(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
       if (!['true', 'false'].includes(env.PUBLISH_IMAGES)) throw new Error('Invalid publication mode');
-      if (env.PUBLISH_IMAGES === 'true') {
+      const publish = env.PUBLISH_IMAGES === 'true';
+      const v = metadataVersion({
+        sourceRef: env.SOURCE_REF,
+        versionFile: env.VERSION_FILE,
+        versionContents: publish ? undefined : readFileSync(env.VERSION_FILE, 'utf8'),
+        publish,
+      });
+      const sha = sourceSha(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
+      if (publish) {
         const tag = (env.SOURCE_REF ?? '').replace(/^refs\/tags\//, '');
-        if (tag !== v && tag !== `v${v}`) throw new Error('Production publication requires the matching release tag');
         execFileSync('git', ['fetch', '--no-tags', 'origin', `refs/tags/${tag}:refs/tags/${tag}`], { stdio: 'inherit' });
         const tagged = execFileSync('git', ['rev-parse', `refs/tags/${tag}^{commit}`], { encoding: 'utf8' }).trim();
         if (tagged !== sha) throw new Error('Checkout does not match the release tag');

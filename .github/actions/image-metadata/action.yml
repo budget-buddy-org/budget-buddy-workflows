@@ -2,7 +2,7 @@ name: Validate image metadata
 description: Resolve an immutable build commit and validate release/version consistency
 inputs:
   version-file:
-    description: package.json or gradle.properties
+    description: package.json or gradle.properties for candidate builds; production uses the release tag
     required: true
   ref:
     description: Requested source tag or ref

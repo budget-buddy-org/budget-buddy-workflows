@@ -64,7 +64,7 @@ Platform records bind the repository, version, source SHA, architecture, and reg
 
 One [vulnerability policy](container-policy.json) applies to both apps on both architectures: fixed CRITICAL findings and CRITICAL secrets block publication; HIGH findings are reported. Unfixed CVEs are excluded. Callers cannot override this policy. Scan infrastructure failures fail the job. Available SARIF is uploaded before applying the vulnerability gate, including when a scan fails.
 
-Manual image runs default to candidate mode and only create `ci-<run>-<attempt>` tags. Candidate validation pulls both architectures and verifies tag-copy digest preservation. Production mode requires the matching source release tag. The signed index is promoted to its exact version, with architecture aliases retained. Only the current GitHub latest release updates `latest` and the minor-series alias. An existing version tag with different content is rejected.
+Manual image runs default to candidate mode and only create `ci-<run>-<attempt>` tags; candidate versions come from each caller's version file. Production versions come from the matching stable source release tag, independently of the caller's version file. Candidate validation pulls both architectures and verifies tag-copy digest preservation. The signed index is promoted to its exact version, with architecture aliases retained. Only the current GitHub latest release updates `latest` and the minor-series alias. An existing version tag with different content is rejected.
 
 Retry a failed publication job with its original digest artifacts. This preserves image content and supports idempotent tag promotion. Rebuilding an already published version with different content requires a new release version.
 
