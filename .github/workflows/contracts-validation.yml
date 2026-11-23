@@ -23,7 +23,6 @@ jobs:
         run: pnpm run generate:ts
       - name: Typecheck generated TypeScript
         run: pnpm exec tsc --noEmit --emitDeclarationOnly false
-      - name: Generate Java
-        run: pnpm run generate:java
-      - name: Compile generated Java server stubs
-        run: mvn --file generated/java/pom.xml --no-transfer-progress -DskipTests package
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+      - name: Verify Java contracts publication
+        run: sh scripts/verify-java-publication.sh

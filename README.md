@@ -11,7 +11,7 @@ Caller repositories own their triggers, application commands, and contracts. Thi
 | `commitlint.yml` | API, contracts, web | Identical PR-title and commit checks, push/manual/bot event behavior |
 | `gradle-ci.yml` | API | Build/unit/integration tests, Sonar analysis, JAR artifact |
 | `web-ci.yml` | Web | Lint, production build/type checks, tests |
-| `contracts-validation.yml` | Contracts | Spec lint/validation, generated TypeScript typecheck and Java compilation |
+| `contracts-validation.yml` | Contracts | Spec lint/validation, generated TypeScript typecheck and Java publication consumer check |
 | `release.yml` | API, contracts, web | Repository-scoped App authentication and serialized semantic-release |
 | `gradle-dependency-submission.yml` | API | Dependency graph submission with package-read access |
 | Container actions and `publish-image.yml` | API, web | Source-bound digest handoff, scans, signed manifest, tag promotion |
