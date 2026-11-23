@@ -11,7 +11,10 @@ export function workflowFiles(root) {
 export function checkConsumer(root, revision, versions) {
   if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error('Expected an immutable library revision');
   const refs = workflowFiles(root).flatMap(p => [...readFileSync(p, 'utf8').matchAll(reference)].map(m => m[1]));
-  if (!refs.length || refs.some(ref => ref !== revision)) throw new Error('Every shared action/workflow must use the same library revision');
+  if (!refs.length || refs.some(ref => ref !== revision)) {
+    const observed = [...new Set(refs)].sort().join(', ') || 'no shared references';
+    throw new Error(`Every shared action/workflow must use the same library revision: expected ${revision}, found ${observed}`);
+  }
   if (existsSync(join(root, 'package.json'))) {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   if (pkg.packageManager !== `pnpm@${versions.pnpm}`) throw new Error('packageManager differs from the shared pnpm version');

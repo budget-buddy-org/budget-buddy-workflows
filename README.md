@@ -123,8 +123,13 @@ For branch protection, require `policy / policy` in all three repositories. Imag
 
 The optional `profile` input on `release.yml` selects centrally managed
 configuration. `application` publishes `v<version>` tags and GitHub release
-notes without changing consumer source files. `gradle-app`, `web-app`, and
-`contracts` remain supported with their existing preparation behavior. Omitting
+notes without changing consumer source files. Both API and web select this profile.
+The `contracts` profile retains its package preparation steps. The deprecated
+`gradle-app` and `web-app` profiles remain available for rollback through the
+first successful production web release and tagged image publication on
+`application`. Once that evidence is in the [verification record](docs/verification.md),
+verify both callers still select `application`, then remove the two profiles,
+their setup branches and their compatibility test cases together. Omitting
 the profile retains the existing consumer runner during migration. The managed
 action installs `release/pnpm-lock.yaml` with lifecycle scripts disabled and
 resolves plugins from that installation.
