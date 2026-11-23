@@ -71,3 +71,13 @@ test('Gradle consumers can remove Node tooling without breaking coordinated upda
     assert.throws(() => checkConsumer(root, next, versions), /obsolete lockfile/);
   } finally { rmSync(root, { recursive: true }); }
 });
+
+test('verification records keep literal library pins in dated historical sections', () => {
+  const document = readFileSync(new URL('../docs/verification.md', import.meta.url), 'utf8');
+  assert.ok(document.includes('/actions/workflows/audit-consumers.yml'));
+  let historical = false;
+  for (const line of document.split('\n')) {
+    if (/^#{1,2} /.test(line)) historical = /^## Historical verification — \d{4}-\d{2}-\d{2}$/.test(line);
+    if (!historical) assert.doesNotMatch(line, /\b[0-9a-f]{40}\b/i, 'Put immutable pins in dated Historical sections');
+  }
+});

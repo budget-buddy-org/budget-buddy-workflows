@@ -44,6 +44,15 @@ jobs:
         env:
           LIBRARY_REVISION: ${{ steps.target.outputs.revision }}
         run: |
-          for consumer in consumers/*; do
-            node scripts/consumer-policy.mjs check "$consumer"
+          echo "Validated library commit: \`$LIBRARY_REVISION\`" >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          for consumer in consumers/api consumers/web consumers/contracts; do
+            if node scripts/consumer-policy.mjs check "$consumer"; then
+              result=aligned
+            else
+              result="failed policy check (see job log)"
+              status=1
+            fi
+            echo "- ${consumer#consumers/}: $result" >> "$GITHUB_STEP_SUMMARY"
           done
+          exit "$status"
