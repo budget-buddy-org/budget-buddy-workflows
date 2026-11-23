@@ -1,0 +1,3 @@
+# The managed conventionalcommits v10 preset requires the v9 writer.
+overrides:
+  '@semantic-release/release-notes-generator@14.1.1>conventional-changelog-writer': 9.3.0
